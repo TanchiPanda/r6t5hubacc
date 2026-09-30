@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>R6T5 Hub · 注册</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; font-family:"Microsoft Yahei","PingFang SC",-apple-system,sans-serif; }
+  body {
+    min-height:100vh;
+    background:linear-gradient(135deg,#1a1a2e,#16213e,#0f3460);
+    color:#fff;
+    display:flex; align-items:flex-start; justify-content:center;
+    padding:40px 16px;
+  }
+  .container { width:100%; max-width:480px; }
+  .header { text-align:center; margin-bottom:28px; }
+  .header h1 { font-size:24px; color:#ffd700; letter-spacing:2px; }
+  .header p { font-size:13px; color:#a8a8d8; margin-top:6px; }
+  .card {
+    background:rgba(255,255,255,0.06);
+    border:1px solid rgba(255,255,255,0.1);
+    border-radius:16px; padding:24px;
+    backdrop-filter:blur(10px);
+  }
+  .card h2 { font-size:16px; color:#ffd700; margin-bottom:16px; }
+  .field { margin-bottom:14px; }
+  .field label { display:block; font-size:13px; color:#a8a8d8; margin-bottom:4px; }
+  .field input {
+    width:100%; padding:11px 14px; border-radius:10px;
+    border:1px solid rgba(255,255,255,0.15); background:rgba(0,0,0,0.25);
+    color:#fff; font-size:15px; outline:none;
+  }
+  .field input:focus { border-color:#ffd700; }
+  .btn {
+    width:100%; padding:12px; border-radius:10px; border:none;
+    font-size:15px; font-weight:bold; cursor:pointer; margin-top:6px;
+  }
+  .btn:active { transform:scale(0.98); }
+  .btn-primary { background:linear-gradient(135deg,#ffd700,#ff8822); color:#1a1a2e; }
+  .btn-secondary { background:rgba(78,205,196,0.15); color:#4ecdc4; border:1px solid rgba(78,205,196,0.4); }
+  .btn:disabled { opacity:0.5; cursor:not-allowed; }
+  .msg { font-size:13px; margin-top:10px; min-height:18px; }
+  .msg.ok { color:#39d98a; }
+  .msg.err { color:#ff8888; }
+  .login-link { text-align:center; margin-top:16px; font-size:13px; color:#a8a8d8; }
+  .login-link a { color:#4ecdc4; text-decoration:none; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>⚡ R6T5 Hub</h1>
+    <p>创建新账号</p>
+  </div>
+  <div class="card">
+    <h2>注册</h2>
+    <div class="field">
+      <label>昵称</label>
+      <input type="text" id="nickInput" placeholder="给自己起个名字">
+    </div>
+    <div class="field">
+      <label>邮箱</label>
+      <input type="email" id="emailInput" placeholder="you@example.com">
+    </div>
+    <div class="field">
+      <label>密码</label>
+      <input type="password" id="passInput" placeholder="至少6位">
+    </div>
+    <div class="field">
+      <label>确认密码</label>
+      <input type="password" id="passInput2" placeholder="再次输入密码">
+    </div>
+    <button class="btn btn-primary" id="regBtn" onclick="doRegister()">注册</button>
+    <div class="msg" id="regMsg"></div>
+    <div class="login-link">已有账号？<a href="index.html">直接登录</a></div>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+const SUPABASE_URL = "https://fckqmlwkujixwztzqqni.supabase.co";
+const SUPABASE_KEY = "sb_publishable_x0i6QcZ6TEOAy40Ub8TAbQ_07YQnrAG";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: { persistSession: true, autoRefreshToken: true }
+});
+
+function showMsg(text, ok) {
+  const el = document.getElementById("regMsg");
+  el.textContent = text;
+  el.className = "msg " + (ok ? "ok" : "err");
+}
+
+async function doRegister() {
+  const nick = document.getElementById("nickInput").value.trim();
+  const email = document.getElementById("emailInput").value.trim();
+  const p1 = document.getElementById("passInput").value;
+  const p2 = document.getElementById("passInput2").value;
+  if (!nick) { showMsg("请输入昵称", false); return; }
+  if (!email) { showMsg("请输入邮箱", false); return; }
+  if (p1.length < 6) { showMsg("密码至少6位", false); return; }
+  if (p1 !== p2) { showMsg("两次密码不一致", false); return; }
+  const btn = document.getElementById("regBtn");
+  btn.disabled = true; btn.textContent = "注册中…";
+  const { error } = await sb.auth.signUp({
+    email,
+    password: p1,
+    options: {
+      data: { name: nick },
+      emailRedirectTo: location.origin + "/"
+    }
+  });
+  btn.disabled = false; btn.textContent = "注册";
+  if (error) { showMsg(error.message, false); return; }
+  showMsg("✅ 注册成功！请检查邮箱验证后登录。", true);
+  setTimeout(() => location.href = "index.html", 2500);
+}
+
+// 已登录则跳转
+sb.auth.getSession().then(({ data }) => {
+  if (data.session) location.href = "index.html";
+});
+</script>
+</body>
+</html>
