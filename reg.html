@@ -127,8 +127,8 @@ async function doRegister() {
   });
   btn.disabled = false; btn.textContent = "注册";
   if (error) { showMsg(error.message, false); return; }
-  showMsg("✅ 注册成功！请检查邮箱验证后登录。", true);
-  setTimeout(() => location.href = "index.html" + (APP_REDIRECT ? "?app=" + APP_REDIRECT : ""), 2500);
+  showMsg("✅ 一封含有账号激活链接的邮件已送达，请检查收件箱，待邮箱验证完成后返回登录。", true);
+  setTimeout(() => location.href = "index.html" + (APP_REDIRECT ? "?app=" + APP_REDIRECT : ""), 5000);
 }
 
 // 已登录则跳转
