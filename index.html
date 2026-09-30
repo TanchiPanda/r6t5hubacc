@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>R6T5 Hub · 账号管理</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; font-family:"Microsoft Yahei","PingFang SC",-apple-system,sans-serif; }
+  body {
+    min-height:100vh;
+    background:linear-gradient(135deg,#1a1a2e,#16213e,#0f3460);
+    color:#fff;
+    display:flex; align-items:flex-start; justify-content:center;
+    padding:40px 16px;
+  }
+  .container { width:100%; max-width:480px; }
+  .header { text-align:center; margin-bottom:28px; }
+  .header h1 { font-size:24px; color:#ffd700; letter-spacing:2px; }
+  .header p { font-size:13px; color:#a8a8d8; margin-top:6px; }
+  .card {
+    background:rgba(255,255,255,0.06);
+    border:1px solid rgba(255,255,255,0.1);
+    border-radius:16px; padding:24px; margin-bottom:16px;
+    backdrop-filter:blur(10px);
+  }
+  .card h2 { font-size:16px; color:#ffd700; margin-bottom:16px; }
+  .avatar {
+    width:64px; height:64px; border-radius:50%;
+    background:linear-gradient(135deg,#ffd700,#ff8822);
+    display:flex; align-items:center; justify-content:center;
+    font-size:28px; margin:0 auto 12px;
+  }
+  .email { text-align:center; font-size:14px; color:#a8a8d8; margin-bottom:4px; }
+  .nickname { text-align:center; font-size:18px; font-weight:bold; margin-bottom:16px; }
+  .field { margin-bottom:14px; }
+  .field label { display:block; font-size:13px; color:#a8a8d8; margin-bottom:4px; }
+  .field input {
+    width:100%; padding:11px 14px; border-radius:10px;
+    border:1px solid rgba(255,255,255,0.15); background:rgba(0,0,0,0.25);
+    color:#fff; font-size:15px; outline:none;
+  }
+  .field input:focus { border-color:#ffd700; }
+  .btn {
+    width:100%; padding:12px; border-radius:10px; border:none;
+    font-size:15px; font-weight:bold; cursor:pointer; margin-top:6px;
+    transition:0.15s;
+  }
+  .btn:active { transform:scale(0.98); }
+  .btn-primary { background:linear-gradient(135deg,#ffd700,#ff8822); color:#1a1a2e; }
+  .btn-secondary { background:rgba(78,205,196,0.15); color:#4ecdc4; border:1px solid rgba(78,205,196,0.4); }
+  .btn-danger { background:rgba(255,100,100,0.15); color:#ff6b6b; border:1px solid rgba(255,107,107,0.4); }
+  .btn:disabled { opacity:0.5; cursor:not-allowed; }
+  .msg { font-size:13px; margin-top:10px; min-height:18px; }
+  .msg.ok { color:#39d98a; }
+  .msg.err { color:#ff8888; }
+  .hidden { display:none; }
+  .divider { margin:20px 0; border-top:1px solid rgba(255,255,255,0.1); }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>⚡ R6T5 Hub</h1>
+    <p>账号管理中心</p>
+  </div>
+
+  <!-- 登录页 -->
+  <div id="loginPage">
+    <div class="card">
+      <h2>登录</h2>
+      <div class="field">
+        <label>邮箱</label>
+        <input type="email" id="loginEmail" placeholder="you@example.com">
+      </div>
+      <div class="field">
+        <label>密码</label>
+        <input type="password" id="loginPass" placeholder="••••••••">
+      </div>
+      <button class="btn btn-primary" id="loginBtn" onclick="doLogin()">登录</button>
+      <button class="btn btn-secondary" onclick="doResetPwd()">忘记密码？</button>
+      <div class="msg" id="loginMsg"></div>
+    </div>
+  </div>
+
+  <!-- 管理页 -->
+  <div id="adminPage" class="hidden">
+    <div class="card">
+      <div class="avatar">👤</div>
+      <div class="email" id="adminEmail"></div>
+      <div class="nickname" id="adminNick"></div>
+    </div>
+
+    <div class="card">
+      <h2>✏️ 修改昵称</h2>
+      <div class="field">
+        <label>新昵称</label>
+        <input type="text" id="nickInput" placeholder="输入昵称">
+      </div>
+      <button class="btn btn-primary" onclick="saveNick()">保存昵称</button>
+      <div class="msg" id="nickMsg"></div>
+    </div>
+
+    <div class="card">
+      <h2>🔑 修改密码</h2>
+      <div class="field">
+        <label>新密码</label>
+        <input type="password" id="newPass" placeholder="至少6位">
+      </div>
+      <div class="field">
+        <label>确认新密码</label>
+        <input type="password" id="newPass2" placeholder="再次输入">
+      </div>
+      <button class="btn btn-primary" onclick="changePwd()">更新密码</button>
+      <div class="msg" id="pwdMsg"></div>
+    </div>
+
+    <div class="card">
+      <h2>📧 发送重置密码邮件</h2>
+      <p style="font-size:13px;color:#a8a8d8;margin-bottom:12px;">向当前邮箱发送密码重置链接。</p>
+      <button class="btn btn-secondary" onclick="sendReset()">发送重置邮件</button>
+      <div class="msg" id="resetMsg"></div>
+    </div>
+
+    <div class="divider"></div>
+    <button class="btn btn-danger" onclick="doLogout()">退出登录</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+const SUPABASE_URL = "https://fckqmlwkujixwztzqqni.supabase.co";
+const SUPABASE_KEY = "sb_publishable_x0i6QcZ6TEOAy40Ub8TAbQ_07YQnrAG";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: { persistSession: true, autoRefreshToken: true }
+});
+
+function showMsg(id, text, ok) {
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.className = "msg " + (ok ? "ok" : "err");
+}
+
+async function doLogin() {
+  const email = document.getElementById("loginEmail").value.trim();
+  const pass = document.getElementById("loginPass").value;
+  if (!email || !pass) { showMsg("loginMsg", "请输入邮箱和密码", false); return; }
+  const btn = document.getElementById("loginBtn");
+  btn.disabled = true; btn.textContent = "登录中…";
+  const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+  btn.disabled = false; btn.textContent = "登录";
+  if (error) showMsg("loginMsg", error.message, false);
+}
+
+async function doResetPwd() {
+  const email = document.getElementById("loginEmail").value.trim();
+  if (!email) { showMsg("loginMsg", "请先输入邮箱", false); return; }
+  const { error } = await sb.auth.resetPasswordForEmail(email, {
+    redirectTo: location.origin + "/?reset=1"
+  });
+  showMsg("loginMsg", error ? error.message : "✅ 重置邮件已发送，请查收", !error);
+}
+
+async function saveNick() {
+  const nick = document.getElementById("nickInput").value.trim();
+  if (!nick) { showMsg("nickMsg", "昵称不能为空", false); return; }
+  const { error } = await sb.auth.updateUser({ data: { name: nick } });
+  showMsg("nickMsg", error ? error.message : "✅ 昵称已更新", !error);
+  if (!error) document.getElementById("adminNick").textContent = nick;
+}
+
+async function changePwd() {
+  const p1 = document.getElementById("newPass").value;
+  const p2 = document.getElementById("newPass2").value;
+  if (p1.length < 6) { showMsg("pwdMsg", "密码至少6位", false); return; }
+  if (p1 !== p2) { showMsg("pwdMsg", "两次密码不一致", false); return; }
+  const { error } = await sb.auth.updateUser({ password: p1 });
+  showMsg("pwdMsg", error ? error.message : "✅ 密码已更新", !error);
+  if (!error) { document.getElementById("newPass").value = ""; document.getElementById("newPass2").value = ""; }
+}
+
+async function sendReset() {
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user?.email) return;
+  const { error } = await sb.auth.resetPasswordForEmail(user.email, {
+    redirectTo: location.origin + "/?reset=1"
+  });
+  showMsg("resetMsg", error ? error.message : "✅ 重置邮件已发送", !error);
+}
+
+async function doLogout() {
+  await sb.auth.signOut();
+  location.reload();
+}
+
+// 监听登录状态
+sb.auth.onAuthStateChange((event, session) => {
+  if (session && session.user) {
+    document.getElementById("loginPage").classList.add("hidden");
+    document.getElementById("adminPage").classList.remove("hidden");
+    document.getElementById("adminEmail").textContent = session.user.email || "";
+    document.getElementById("adminNick").textContent =
+      session.user.user_metadata?.name || session.user.email || "用户";
+    document.getElementById("nickInput").value =
+      session.user.user_metadata?.name || "";
+  } else {
+    document.getElementById("loginPage").classList.remove("hidden");
+    document.getElementById("adminPage").classList.add("hidden");
+  }
+});
+
+// 密码重置回调（?reset=1）
+if (new URLSearchParams(location.search).get("reset")) {
+  showMsg("loginMsg", "🔑 请设置新密码", true);
+}
+</script>
+</body>
+</html>
