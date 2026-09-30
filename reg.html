@@ -90,6 +90,13 @@ function showMsg(text, ok) {
   el.className = "msg " + (ok ? "ok" : "err");
 }
 
+const urlParams = new URLSearchParams(location.search);
+const APP_REDIRECT = urlParams.get("app") || "";
+const APP_URLS = {
+  wordgm: "https://wordgm.r6t5.cloud-ip.cc",
+  wrobook: "https://wrobook.r6t5.cloud-ip.cc"
+};
+
 async function doRegister() {
   const nick = document.getElementById("nickInput").value.trim();
   const email = document.getElementById("emailInput").value.trim();
@@ -101,23 +108,28 @@ async function doRegister() {
   if (p1 !== p2) { showMsg("两次密码不一致", false); return; }
   const btn = document.getElementById("regBtn");
   btn.disabled = true; btn.textContent = "注册中…";
+  const retUrl = location.origin + "/" + (APP_REDIRECT ? "?app=" + APP_REDIRECT : "");
   const { error } = await sb.auth.signUp({
     email,
     password: p1,
     options: {
       data: { name: nick },
-      emailRedirectTo: location.origin + "/"
+      emailRedirectTo: retUrl
     }
   });
   btn.disabled = false; btn.textContent = "注册";
   if (error) { showMsg(error.message, false); return; }
   showMsg("✅ 注册成功！请检查邮箱验证后登录。", true);
-  setTimeout(() => location.href = "index.html", 2500);
+  setTimeout(() => location.href = "index.html" + (APP_REDIRECT ? "?app=" + APP_REDIRECT : ""), 2500);
 }
 
 // 已登录则跳转
 sb.auth.getSession().then(({ data }) => {
-  if (data.session) location.href = "index.html";
+  if (data.session) {
+    const ret = APP_URLS[APP_REDIRECT];
+    if (ret) location.href = ret;
+    else location.href = "index.html";
+  }
 });
 </script>
 </body>

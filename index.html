@@ -78,8 +78,12 @@
       </div>
       <button class="btn btn-primary" id="loginBtn" onclick="doLogin()">登录</button>
       <button class="btn btn-secondary" onclick="doResetPwd()">忘记密码？</button>
+      <div style="display:flex;gap:10px;margin-top:10px;">
+        <button class="btn btn-secondary" style="flex:1" onclick="oauthLogin('github')">GitHub</button>
+        <button class="btn btn-secondary" style="flex:1" onclick="oauthLogin('google')">Google</button>
+      </div>
       <div style="text-align:center;margin-top:14px;font-size:13px;color:#a8a8d8;">
-        还没有账号？<a href="reg.html" style="color:#4ecdc4;text-decoration:none;">注册新账号</a>
+        还没有账号？<a href="reg.html?app=wordgm" style="color:#4ecdc4;text-decoration:none;">注册新账号</a>
       </div>
       <div class="msg" id="loginMsg"></div>
     </div>
@@ -143,6 +147,14 @@ function showMsg(id, text, ok) {
   el.className = "msg " + (ok ? "ok" : "err");
 }
 
+function oauthLogin(provider) {
+  const ret = getAppReturnUrl();
+  sb.auth.signInWithOAuth({
+    provider: provider,
+    options: { redirectTo: location.origin + "/?app=" + (APP_REDIRECT || "") }
+  });
+}
+
 async function doLogin() {
   const email = document.getElementById("loginEmail").value.trim();
   const pass = document.getElementById("loginPass").value;
@@ -195,9 +207,66 @@ async function doLogout() {
   location.reload();
 }
 
+// 读取 app 参数（从哪个应用跳转来）
+const urlParams = new URLSearchParams(location.search);
+const APP_REDIRECT = urlParams.get("app") || "";
+
+const APP_URLS = {
+  wordgm: "https://wordgm.r6t5.cloud-ip.cc",
+  wrobook: "https://wrobook.r6t5.cloud-ip.cc"
+};
+
+function getAppReturnUrl() {
+  return APP_URLS[APP_REDIRECT] || null;
+}
+
+// 设置跨子域名 cookie
+function setHubCookie(name, value, days) {
+  const d = new Date();
+  d.setTime(d.getTime() + (days || 7) * 864e5);
+  document.cookie = name + "=" + encodeURIComponent(value) +
+    ";expires=" + d.toUTCString() +
+    ";path=/;domain=.r6t5.cloud-ip.cc;SameSite=Lax";
+}
+function clearHubCookie(name) {
+  document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=.r6t5.cloud-ip.cc";
+}
+
+// 登录成功后：设置 cookie 并跳回应用
+function afterLogin(session) {
+  if (!session || !session.user) return;
+  const user = session.user;
+  const meta = user.user_metadata || {};
+  setHubCookie("rt_token", session.access_token || "", 7);
+  setHubCookie("rt_user", JSON.stringify({
+    id: user.id, email: user.email,
+    name: meta.name || user.email,
+    avatar_url: meta.avatar_url || ""
+  }), 7);
+  const ret = getAppReturnUrl();
+  if (ret) {
+    location.href = ret + "/?login=ok";
+  }
+}
+
+// 退出登录
+async function doLogout() {
+  await sb.auth.signOut();
+  clearHubCookie("rt_token");
+  clearHubCookie("rt_user");
+  const ret = getAppReturnUrl();
+  if (ret) location.href = ret;
+  else location.reload();
+}
+
 // 监听登录状态
 sb.auth.onAuthStateChange((event, session) => {
   if (session && session.user) {
+    // 如果是从应用跳转来的，登录成功后直接跳回
+    if (APP_REDIRECT && APP_URLS[APP_REDIRECT] && event === "SIGNED_IN") {
+      afterLogin(session);
+      return;
+    }
     document.getElementById("loginPage").classList.add("hidden");
     document.getElementById("adminPage").classList.remove("hidden");
     document.getElementById("adminEmail").textContent = session.user.email || "";
@@ -212,8 +281,19 @@ sb.auth.onAuthStateChange((event, session) => {
 });
 
 // 密码重置回调（?reset=1）
-if (new URLSearchParams(location.search).get("reset")) {
+if (urlParams.get("reset")) {
   showMsg("loginMsg", "🔑 请设置新密码", true);
+}
+
+// 退出跳转（?logout=1）
+if (urlParams.get("logout")) {
+  (async () => {
+    await sb.auth.signOut();
+    clearHubCookie("rt_token");
+    clearHubCookie("rt_user");
+    const ret = getAppReturnUrl();
+    if (ret) location.href = ret;
+  })();
 }
 </script>
 </body>
