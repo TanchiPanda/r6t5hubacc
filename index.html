@@ -60,8 +60,8 @@
 <body>
 <div class="container">
   <div class="header">
-    <h1>⚡ R6T5 Hub</h1>
-    <p>账号管理中心</p>
+    <h1 id="pageTitle">⚡ R6T5 Hub</h1>
+    <p id="pageSubtitle">账号管理中心</p>
   </div>
 
   <!-- 登录页 -->
@@ -210,6 +210,16 @@ async function doLogout() {
 // 读取 app 参数（从哪个应用跳转来）
 const urlParams = new URLSearchParams(location.search);
 const APP_REDIRECT = urlParams.get("app") || "";
+
+// 根据来源应用改标题
+const APP_NAMES = {
+  wordgm: "《单词闯关》",
+  wrobook: "《错题本》"
+};
+if (APP_REDIRECT && APP_NAMES[APP_REDIRECT]) {
+  document.getElementById("pageTitle").textContent = "🔐 登录";
+  document.getElementById("pageSubtitle").textContent = "登录以继续使用" + APP_NAMES[APP_REDIRECT];
+}
 
 const APP_URLS = {
   wordgm: "https://wordgm.r6t5.cloud-ip.cc",

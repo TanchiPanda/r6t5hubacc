@@ -50,8 +50,8 @@
 <body>
 <div class="container">
   <div class="header">
-    <h1>⚡ R6T5 Hub</h1>
-    <p>创建新账号</p>
+    <h1 id="pageTitle">⚡ R6T5 Hub</h1>
+    <p id="pageSubtitle">创建新账号</p>
   </div>
   <div class="card">
     <h2>注册</h2>
@@ -92,6 +92,14 @@ function showMsg(text, ok) {
 
 const urlParams = new URLSearchParams(location.search);
 const APP_REDIRECT = urlParams.get("app") || "";
+const APP_NAMES = {
+  wordgm: "《单词闯关》",
+  wrobook: "《错题本》"
+};
+if (APP_REDIRECT && APP_NAMES[APP_REDIRECT]) {
+  document.getElementById("pageTitle").textContent = "🔐 注册";
+  document.getElementById("pageSubtitle").textContent = "创建账号以使用" + APP_NAMES[APP_REDIRECT];
+}
 const APP_URLS = {
   wordgm: "https://wordgm.r6t5.cloud-ip.cc",
   wrobook: "https://wrobook.r6t5.cloud-ip.cc"
