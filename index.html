@@ -78,7 +78,8 @@
       </div>
       <button class="btn btn-primary" id="loginBtn" onclick="doLogin()">登录</button>
       <button class="btn btn-secondary" onclick="doResetPwd()">忘记密码？</button>
-      <div style="display:flex;gap:10px;margin-top:10px;">
+      <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;">
+        <button class="btn btn-secondary" style="flex:1" onclick="oauthLogin('azure')">Microsoft</button>
         <button class="btn btn-secondary" style="flex:1" onclick="oauthLogin('github')">GitHub</button>
         <button class="btn btn-secondary" style="flex:1" onclick="oauthLogin('google')">Google</button>
       </div>
@@ -222,8 +223,8 @@ if (APP_REDIRECT && APP_NAMES[APP_REDIRECT]) {
 }
 
 const APP_URLS = {
-  wordgm: "https://wordgm.r6t5.cloud-ip.cc",
-  wrobook: "https://wrobook.r6t5.cloud-ip.cc"
+  wordgm: "https://wordgm.r6t5.dpdns.org",
+  wrobook: "https://wrobook.r6t5.dpdns.org"
 };
 
 function getAppReturnUrl() {
@@ -236,10 +237,10 @@ function setHubCookie(name, value, days) {
   d.setTime(d.getTime() + (days || 7) * 864e5);
   document.cookie = name + "=" + encodeURIComponent(value) +
     ";expires=" + d.toUTCString() +
-    ";path=/;domain=.r6t5.cloud-ip.cc;SameSite=Lax";
+    ";path=/;domain=.r6t5.dpdns.org;SameSite=Lax";
 }
 function clearHubCookie(name) {
-  document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=.r6t5.cloud-ip.cc";
+  document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=.r6t5.dpdns.org";
 }
 
 // 登录成功后：设置 cookie 并跳回应用
