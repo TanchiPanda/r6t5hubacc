@@ -23,122 +23,59 @@
     border-radius:16px; padding:24px;
     backdrop-filter:blur(10px);
   }
-  .card h2 { font-size:16px; color:#ffd700; margin-bottom:16px; }
-  .field { margin-bottom:14px; }
-  .field label { display:block; font-size:13px; color:#a8a8d8; margin-bottom:4px; }
-  .field input {
-    width:100%; padding:11px 14px; border-radius:10px;
-    border:1px solid rgba(255,255,255,0.15); background:rgba(0,0,0,0.25);
-    color:#fff; font-size:15px; outline:none;
-  }
-  .field input:focus { border-color:#ffd700; }
+  .card h2 { font-size:16px; color:#ffd700; margin-bottom:14px; }
   .btn {
     width:100%; padding:12px; border-radius:10px; border:none;
-    font-size:15px; font-weight:bold; cursor:pointer; margin-top:6px;
+    font-size:15px; font-weight:bold; cursor:pointer; margin-top:10px;
   }
   .btn:active { transform:scale(0.98); }
   .btn-primary { background:linear-gradient(135deg,#ffd700,#ff8822); color:#1a1a2e; }
-  .btn-secondary { background:rgba(78,205,196,0.15); color:#4ecdc4; border:1px solid rgba(78,205,196,0.4); }
-  .btn:disabled { opacity:0.5; cursor:not-allowed; }
-  .msg { font-size:13px; margin-top:10px; min-height:18px; }
-  .msg.ok { color:#39d98a; }
-  .msg.err { color:#ff8888; }
-  .login-link { text-align:center; margin-top:16px; font-size:13px; color:#a8a8d8; }
-  .login-link a { color:#4ecdc4; text-decoration:none; }
+  .btn-secondary { background:rgba(78,205,196,0.15); color:#4ecdc4; border:1px solid rgba(78,205,196,0.4); display:block; text-align:center; text-decoration:none; box-sizing:border-box; }
+  .note { font-size:14px; color:#a8a8d8; line-height:1.8; }
+  .step { font-size:14px; line-height:1.9; color:#cfcfe8; padding-left:4px; }
+  .step b { color:#ffd700; }
 </style>
 </head>
 <body>
 <div class="container">
   <div class="header">
     <h1 id="pageTitle">⚡ R6T5 Hub</h1>
-    <p id="pageSubtitle">创建新账号</p>
+    <p id="pageSubtitle">注册账号</p>
   </div>
   <div class="card">
     <h2>注册</h2>
-    <div class="field">
-      <label>昵称</label>
-      <input type="text" id="nickInput" placeholder="给自己起个名字">
+    <div class="note" style="margin-bottom:14px;">
+      本平台不单独存储账号密码，统一使用 <b style="color:#ffd700;">Microsoft 账号</b> 登录。
+      已拥有 Microsoft 账号即可直接使用，无需再次注册。
     </div>
-    <div class="field">
-      <label>邮箱</label>
-      <input type="email" id="emailInput" placeholder="you@example.com">
+    <div class="note" style="margin-bottom:16px;">
+      还没有 Microsoft 账号？按以下步骤免费创建：
     </div>
-    <div class="field">
-      <label>密码</label>
-      <input type="password" id="passInput" placeholder="至少6位">
+    <div class="step">
+      1. 点击下方按钮前往 Microsoft 注册页<br>
+      2. 填写邮箱并设置密码<br>
+      3. 完成后返回本页，点击「去登录」
     </div>
-    <div class="field">
-      <label>确认密码</label>
-      <input type="password" id="passInput2" placeholder="再次输入密码">
-    </div>
-    <button class="btn btn-primary" id="regBtn" onclick="doRegister()">注册</button>
-    <div class="msg" id="regMsg"></div>
-    <div class="login-link">已有账号？<a href="index.html">直接登录</a></div>
+    <a class="btn btn-secondary" href="https://signup.live.com/" target="_blank">前往 Microsoft 注册</a>
+    <button class="btn btn-primary" onclick="goLogin()">已完成，去登录</button>
   </div>
 </div>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
-const SUPABASE_URL = "https://fckqmlwkujixwztzqqni.supabase.co";
-const SUPABASE_KEY = "sb_publishable_x0i6QcZ6TEOAy40Ub8TAbQ_07YQnrAG";
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-  auth: { persistSession: true, autoRefreshToken: true }
-});
-
-function showMsg(text, ok) {
-  const el = document.getElementById("regMsg");
-  el.textContent = text;
-  el.className = "msg " + (ok ? "ok" : "err");
-}
-
-const urlParams = new URLSearchParams(location.search);
-const APP_REDIRECT = urlParams.get("app") || "";
-const APP_NAMES = {
-  wordgm: "《单词闯关》",
-  wrobook: "《错题本》"
-};
-if (APP_REDIRECT && APP_NAMES[APP_REDIRECT]) {
-  document.getElementById("pageTitle").textContent = "🔐 注册";
-  document.getElementById("pageSubtitle").textContent = "创建账号以使用" + APP_NAMES[APP_REDIRECT];
-}
+const Q = new URLSearchParams(location.search);
+const APP = Q.get("app") || "";
+const APP_NAMES = { wordgm: "《单词闯关》", wrobook: "《错题本》", tanchi: "《TanchiNotes》" };
 const APP_URLS = {
   wordgm: "https://wordgm.r6t5.dpdns.org",
-  wrobook: "https://wrobook.r6t5.dpdns.org"
+  wrobook: "https://wrobook.r6t5.dpdns.org",
+  tanchi: "https://tanchi.r6t5.dpdns.org"
 };
-
-async function doRegister() {
-  const nick = document.getElementById("nickInput").value.trim();
-  const email = document.getElementById("emailInput").value.trim();
-  const p1 = document.getElementById("passInput").value;
-  const p2 = document.getElementById("passInput2").value;
-  if (!nick) { showMsg("请输入昵称", false); return; }
-  if (!email) { showMsg("请输入邮箱", false); return; }
-  if (p1.length < 6) { showMsg("密码至少6位", false); return; }
-  if (p1 !== p2) { showMsg("两次密码不一致", false); return; }
-  const btn = document.getElementById("regBtn");
-  btn.disabled = true; btn.textContent = "注册中…";
-  const retUrl = location.origin + "/" + (APP_REDIRECT ? "?app=" + APP_REDIRECT : "");
-  const { error } = await sb.auth.signUp({
-    email,
-    password: p1,
-    options: {
-      data: { name: nick },
-      emailRedirectTo: retUrl
-    }
-  });
-  btn.disabled = false; btn.textContent = "注册";
-  if (error) { showMsg(error.message, false); return; }
-  showMsg("✅ 一封含有账号激活链接的邮件已送达，请检查收件箱，待邮箱验证完成后返回登录。", true);
-  setTimeout(() => location.href = "index.html" + (APP_REDIRECT ? "?app=" + APP_REDIRECT : ""), 5000);
+if (APP && APP_NAMES[APP]) {
+  document.getElementById("pageTitle").textContent = "🔐 注册";
+  document.getElementById("pageSubtitle").textContent = "创建账号以使用" + APP_NAMES[APP];
 }
-
-// 已登录则跳转
-sb.auth.getSession().then(({ data }) => {
-  if (data.session) {
-    const ret = APP_URLS[APP_REDIRECT];
-    if (ret) location.href = ret;
-    else location.href = "index.html";
-  }
-});
+function goLogin() {
+  location.href = "index.html" + (APP ? "?app=" + APP : "");
+}
 </script>
 </body>
 </html>
