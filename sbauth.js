@@ -9,6 +9,7 @@ var SB_USER_KEY = "wordGameGitHubUser";
 var _sb = null;
 var _sbPromise = null;
 
+// ---------- 懒加载 Supabase JS ----------
 function _injectSupabase() {
     if (_sbPromise) return _sbPromise;
     _sbPromise = new Promise(function (resolve, reject) {
@@ -33,21 +34,32 @@ function _injectSupabase() {
     return _sbPromise;
 }
 
+// ---------- 初始化 client ----------
 async function sbInit() {
     if (_sb) return _sb;
     await _injectSupabase();
     _sb = window.supabase.createClient(SB_URL, SB_ANON, {
-        auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }
+        auth: {
+            persistSession: true,
+            autoRefreshToken: true,
+            detectSessionInUrl: false
+        }
     });
     return _sb;
 }
 
+// ---------- 用户对象映射 ----------
 function _mapUser(sbUser) {
     if (!sbUser) return null;
     var email = sbUser.email || (sbUser.user_metadata && sbUser.user_metadata.email) || "";
     var name = (sbUser.user_metadata && (sbUser.user_metadata.name || sbUser.user_metadata.full_name)) || email;
-    return { id: sbUser.id || email, name: name, email: email, login: email,
-        avatar_url: (sbUser.user_metadata && sbUser.user_metadata.avatar_url) || "" };
+    return {
+        id: sbUser.id || email,
+        name: name,
+        email: email,
+        login: email,
+        avatar_url: (sbUser.user_metadata && sbUser.user_metadata.avatar_url) || ""
+    };
 }
 
 function _saveAuth(u) {
@@ -56,6 +68,7 @@ function _saveAuth(u) {
     return u;
 }
 
+// ---------- 读取本地用户 ----------
 function sbGetUser() {
     try {
         var u = JSON.parse(localStorage.getItem(SB_USER_KEY) || "null");
@@ -75,6 +88,7 @@ async function sbRefreshUser() {
     return null;
 }
 
+// ---------- 跨子域 cookie ----------
 function _hubCookieDomain() {
     var h = location.hostname;
     var i = h.indexOf(".");
@@ -98,10 +112,13 @@ function _clearHubCookie(name) {
     } catch (e) {}
 }
 
+// ---------- 登录跳转（账号中心自身渲染表单，此函数备用）----------
 function msLogin(options) {
     var opt = options || {};
-    var returnTo = opt.returnTo || location.href;
-    location.href = "https://myacc.r6t5.dpdns.org/?app=wordgm&return=" + encodeURIComponent(returnTo);
+    if (opt.returnTo) {
+        try { localStorage.setItem("msReturnTo", opt.returnTo); } catch (e) {}
+    }
+    location.href = "/index.html";
 }
 
 function msTakeReturnTo(def) {
@@ -113,6 +130,7 @@ function msTakeReturnTo(def) {
     return def || "index.html";
 }
 
+// ---------- 处理回调（魔法链接回跳换会话）----------
 async function msHandleRedirect(redirectUri) {
     var client = await sbInit();
     var params = new URLSearchParams(location.search);
@@ -126,14 +144,19 @@ async function msHandleRedirect(redirectUri) {
     return u;
 }
 
+// ---------- 退出 ----------
 async function msLogout(redirectUri, opt) {
     var back = (opt && opt.postLogoutRedirectUri) || (location.origin + "/index.html");
-    try { var client = await sbInit(); await client.auth.signOut(); } catch (e) {}
+    try {
+        var client = await sbInit();
+        await client.auth.signOut();
+    } catch (e) {}
     try { localStorage.removeItem(SB_USER_KEY); } catch (e) {}
     _clearHubCookie("ms_user");
     location.href = back;
 }
 
+// ---------- 向后兼容别名 ----------
 var msGetUser = sbGetUser;
 function msClearLocal() {
     try { localStorage.removeItem(SB_USER_KEY); } catch (e) {}
