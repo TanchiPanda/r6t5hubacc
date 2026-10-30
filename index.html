@@ -24,9 +24,16 @@
     backdrop-filter:blur(10px);
   }
   .card h2 { font-size:16px; color:#ffd700; margin-bottom:16px; }
+  input {
+    width:100%; padding:12px; border-radius:10px;
+    border:1px solid rgba(255,255,255,0.2);
+    background:rgba(255,255,255,0.08); color:#fff; font-size:14px;
+    margin-top:8px; box-sizing:border-box;
+  }
+  input::placeholder { color:#8888bb; }
   .avatar {
     width:64px; height:64px; border-radius:50%;
-    background:linear-gradient(135deg,#f25022,#ffb900);
+    background:linear-gradient(135deg,#4a9e6e,#5ab87e);
     display:flex; align-items:center; justify-content:center;
     font-size:28px; margin:0 auto 12px;
   }
@@ -46,10 +53,9 @@
   .msg.ok { color:#39d98a; }
   .msg.err { color:#ff8888; }
   .hidden { display:none !important; }
-  .bar { height:8px; border-radius:4px; background:rgba(255,255,255,0.12); overflow:hidden; margin:6px 0; }
-  .bar > div { height:100%; background:linear-gradient(90deg,#0f6cbd,#4ecdc4); }
-  .kv { display:flex; justify-content:space-between; font-size:13px; color:#a8a8d8; }
   .note { font-size:13px; color:#a8a8d8; line-height:1.7; }
+  .links { text-align:center; margin-top:12px; font-size:13px; }
+  .links a { color:#4ecdc4; cursor:pointer; text-decoration:underline; }
 </style>
 </head>
 <body>
@@ -63,12 +69,11 @@
   <div id="loginPage" class="hidden">
     <div class="card">
       <h2>登录</h2>
-      <div class="note" id="loginHint" style="margin-bottom:14px;">使用 Microsoft 账号登录，一个账号通行全部应用。</div>
-      <button class="btn btn-primary" id="msLoginBtn" onclick="startLogin()">使用 Microsoft 账号登录</button>
-      <div class="note" style="margin-top:12px;font-size:12px;color:#888;">
-        没有 Microsoft 账号？
-        <a href="https://signup.live.com/" target="_blank" style="color:#4ecdc4;text-decoration:none;">免费注册一个</a>
-      </div>
+      <div class="note" id="loginHint" style="margin-bottom:8px;">使用邮箱登录，一个账号通行全部应用。</div>
+      <input type="email" id="loginEmail" placeholder="邮箱地址" autocomplete="username">
+      <input type="password" id="loginPw" placeholder="密码（新用户自动注册）" autocomplete="current-password">
+      <button class="btn btn-primary" id="loginBtn" onclick="doLogin()">登录 / 注册</button>
+      <div class="links"><a onclick="sendMagicLink()">发送魔法链接（免密码登录）</a></div>
       <div class="msg" id="loginMsg"></div>
     </div>
   </div>
@@ -79,17 +84,12 @@
       <div class="avatar">👤</div>
       <div class="email" id="adminEmail"></div>
       <div class="nickname" id="adminNick"></div>
-      <button class="btn btn-secondary" onclick="window.open('https://account.microsoft.com/','_blank')">管理 Microsoft 账号</button>
-    </div>
-
-    <div class="card">
-      <h2>☁️ OneDrive 云空间</h2>
-      <div id="driveBox"><div class="note">正在读取…</div></div>
     </div>
 
     <div class="card">
       <h2>🧩 我的应用</h2>
       <button class="btn btn-secondary" onclick="openApp('wordgm')">⚡ 单词闯关</button>
+      <button class="btn btn-secondary" onclick="openApp('wallet')">💰 积分钱包</button>
       <button class="btn btn-secondary" onclick="openApp('wrobook')">📕 错题本</button>
       <button class="btn btn-secondary" onclick="openApp('tanchi')">📝 TanchiNotes</button>
     </div>
@@ -99,30 +99,31 @@
   </div>
 </div>
 
-<script src="msauth.js?v=20261016"></script>
+<script src="sbauth.js?v=20261030"></script>
 <script>
 const Q = new URLSearchParams(location.search);
 const APP = Q.get("app") || "";
-const APP_NAMES = { wordgm: "《单词闯关》", wrobook: "《错题本》", tanchi: "《TanchiNotes》" };
+const RETURN_URL = Q.get("return") || "";
+const APP_NAMES = { wordgm: "《单词闯关》", wallet: "积分钱包", wrobook: "《错题本》", tanchi: "《TanchiNotes》" };
 const APP_URLS = {
   wordgm: "https://wordgm.r6t5.dpdns.org",
+  wallet: "https://wallet.r6t5.dpdns.org",
   wrobook: "https://wrobook.r6t5.dpdns.org",
   tanchi: "https://tanchi.r6t5.dpdns.org"
 };
-const REDIRECT_URI = location.origin + "/";
 
 if (APP && APP_NAMES[APP]) {
   document.getElementById("pageTitle").textContent = "🔐 登录";
   document.getElementById("pageSubtitle").textContent = "登录以继续使用" + APP_NAMES[APP];
   document.getElementById("loginHint").textContent =
-    "登录以继续使用" + APP_NAMES[APP] + "，使用 Microsoft 账号，同时可开启 OneDrive 云同步。";
+    "登录以继续使用" + APP_NAMES[APP] + "，一个账号通行全部应用。";
 }
 
 function showMsg(id, text, ok) {
   const el = document.getElementById(id);
   if (!el) return;
   el.textContent = text;
-  el.className = "msg " + (ok ? "ok" : "err");
+  el.className = "msg " + (ok ? "msg ok" : "msg err");
 }
 
 function showLogin() {
@@ -135,43 +136,64 @@ function showAdmin(user) {
   document.getElementById("adminPage").classList.remove("hidden");
   document.getElementById("adminEmail").textContent = user.email || "";
   document.getElementById("adminNick").textContent = user.name || user.email || "用户";
-  renderDrive();
 }
 
-async function startLogin() {
-  const b = document.getElementById("msLoginBtn");
-  b.disabled = true; b.textContent = "正在跳转…";
-  await msLogin({ redirectUri: REDIRECT_URI, prompt: "select_account" });
-}
-
-async function renderDrive() {
-  const box = document.getElementById("driveBox");
-  if (!msPeekToken()) {
-    box.innerHTML = '<div class="note">尚未授权 OneDrive。点击下方按钮授权后即可查看空间用量。</div>' +
-      '<button class="btn btn-secondary" onclick="authorizeDrive()">🔑 授权 OneDrive</button>';
-    return;
-  }
-  box.innerHTML = '<div class="note">正在读取…</div>';
+async function doLogin() {
+  var email = document.getElementById("loginEmail").value.trim();
+  var pw = document.getElementById("loginPw").value;
+  var btn = document.getElementById("loginBtn");
+  if (!email || !email.includes("@")) { showMsg("loginMsg", "请输入有效邮箱", false); return; }
+  if (!pw) { showMsg("loginMsg", "请输入密码", false); return; }
+  btn.disabled = true; btn.textContent = "登录中…";
   try {
-    const q = await msGetDriveQuota();
-    const gb = n => (n / 1073741824).toFixed(2) + " GB";
-    const pct = q.total ? Math.round(q.used / q.total * 100) : 0;
-    box.innerHTML =
-      '<div class="kv"><span>已用 ' + gb(q.used) + '</span><span>共 ' + gb(q.total) + '</span></div>' +
-      '<div class="bar"><div style="width:' + pct + '%"></div></div>' +
-      '<div class="note" style="margin-top:4px;">剩余 ' + gb(q.remaining) + '（' + pct + '% 已用）</div>' +
-      '<button class="btn btn-secondary" onclick="renderDrive()">🔄 刷新</button>' +
-      '<button class="btn btn-secondary" onclick="window.open(\'https://go.microsoft.com/fwlink/?linkid=2248426\',\'_blank\')">➕ 扩容</button>';
+    var client = await sbInit();
+    var { data, error } = await client.auth.signInWithPassword({ email: email, password: pw });
+    if (error) {
+      if (error.message && error.message.indexOf("Invalid") >= 0) {
+        var su = await client.auth.signUp({ email: email, password: pw });
+        if (su.error) throw su.error;
+        if (!su.data.session) {
+          showMsg("loginMsg", "注册成功，请查收邮箱验证后再登录", true);
+          btn.disabled = false; btn.textContent = "登录 / 注册";
+          return;
+        }
+      } else throw error;
+    }
+    var u = await sbRefreshUser();
+    afterLogin(u);
   } catch (e) {
-    box.innerHTML = '<div class="note" style="color:#ff8888;">读取失败：' + (e.message || e) + '</div>' +
-      '<button class="btn btn-secondary" onclick="authorizeDrive()">🔑 重新授权</button>';
+    showMsg("loginMsg", e.message || "登录失败", false);
+    btn.disabled = false; btn.textContent = "登录 / 注册";
   }
 }
 
-async function authorizeDrive() {
-  const t = await msGetToken({ force: true });
-  if (t) { showMsg("adminMsg", "✅ 已授权", true); renderDrive(); }
-  else { showMsg("adminMsg", "⚠️ 授权未完成，请重试", false); }
+async function sendMagicLink() {
+  var email = document.getElementById("loginEmail").value.trim();
+  if (!email || !email.includes("@")) { showMsg("loginMsg", "请先输入邮箱", false); return; }
+  try {
+    var client = await sbInit();
+    await client.auth.signInWithOtp({
+      email: email,
+      options: { emailRedirectTo: location.origin + "/?app=" + (APP || "") }
+    });
+    showMsg("loginMsg", "已发送登录链接到邮箱，请查收", true);
+  } catch (e) {
+    showMsg("loginMsg", e.message || "发送失败", false);
+  }
+}
+
+function afterLogin(u) {
+  // 优先跳回原页面（return 参数需是同站或已注册的应用域名，防止开放重定向）
+  if (RETURN_URL) {
+    try {
+      var ru = new URL(RETURN_URL, location.origin);
+      if (ru.protocol === "https:" && ru.hostname.endsWith(".r6t5.dpdns.org")) {
+        location.href = ru.href; return;
+      }
+    } catch (e) {}
+  }
+  if (APP && APP_URLS[APP]) { location.href = APP_URLS[APP]; return; }
+  showAdmin(u);
 }
 
 function openApp(id) {
@@ -179,27 +201,19 @@ function openApp(id) {
 }
 
 async function doLogout() {
-  await msLogout(REDIRECT_URI);
+  await msLogout();
 }
 
 (async function () {
   try {
-    const result = await msHandleRedirect(REDIRECT_URI);
-    if (result) {
-      if (APP && APP_URLS[APP]) { location.href = APP_URLS[APP]; return; }
-      showAdmin(result);
-      return;
-    }
-    const user = msGetUser();
-    if (user) {
-      if (APP && APP_URLS[APP]) { location.href = APP_URLS[APP]; return; }
-      showAdmin(user);
-    } else {
-      showLogin();
-    }
+    // 先处理回调（魔法链接回跳）
+    var result = await msHandleRedirect();
+    if (result) { afterLogin(result); return; }
+    var user = sbGetUser();
+    if (user) { afterLogin(user); }
+    else { showLogin(); }
   } catch (e) {
     showLogin();
-    showMsg("loginMsg", "初始化失败：" + (e.message || e), false);
   }
 })();
 </script>
