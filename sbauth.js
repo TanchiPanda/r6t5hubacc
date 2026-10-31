@@ -42,7 +42,8 @@ async function sbInit() {
         auth: {
             persistSession: true,
             autoRefreshToken: true,
-            detectSessionInUrl: false
+            detectSessionInUrl: false,
+            experimental: { passkey: true } // 通行密钥（WebAuthn，实验性 Beta）
         }
     });
     return _sb;
@@ -112,13 +113,13 @@ function _clearHubCookie(name) {
     } catch (e) {}
 }
 
-// ---------- 登录跳转（账号中心自身渲染表单，此函数备用）----------
+// ---------- 登录跳转（去登录页）----------
 function msLogin(options) {
     var opt = options || {};
     if (opt.returnTo) {
         try { localStorage.setItem("msReturnTo", opt.returnTo); } catch (e) {}
     }
-    location.href = "/index.html";
+    location.href = "/login.html";
 }
 
 function msTakeReturnTo(def) {
@@ -130,7 +131,6 @@ function msTakeReturnTo(def) {
     return def || "index.html";
 }
 
-// ---------- 处理回调（魔法链接回跳换会话）----------
 async function msHandleRedirect(redirectUri) {
     var client = await sbInit();
     var params = new URLSearchParams(location.search);
@@ -144,7 +144,6 @@ async function msHandleRedirect(redirectUri) {
     return u;
 }
 
-// ---------- 退出 ----------
 async function msLogout(redirectUri, opt) {
     var back = (opt && opt.postLogoutRedirectUri) || (location.origin + "/index.html");
     try {
@@ -156,7 +155,6 @@ async function msLogout(redirectUri, opt) {
     location.href = back;
 }
 
-// ---------- 向后兼容别名 ----------
 var msGetUser = sbGetUser;
 function msClearLocal() {
     try { localStorage.removeItem(SB_USER_KEY); } catch (e) {}
