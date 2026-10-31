@@ -24,6 +24,7 @@
     backdrop-filter:blur(10px);
   }
   .card h2 { font-size:16px; color:#ffd700; margin-bottom:16px; }
+  /* tab 切换 */
   .tabs { display:flex; gap:8px; margin-bottom:16px; }
   .tab {
     flex:1; padding:11px 0; text-align:center; border-radius:10px; cursor:pointer;
@@ -75,12 +76,14 @@
     <p id="pageSubtitle">账号管理中心</p>
   </div>
 
+  <!-- 未登录 -->
   <div id="loginPage" class="hidden">
     <div class="tabs">
       <div class="tab active" id="tabLogin" onclick="switchTab('login')">登录</div>
       <div class="tab" id="tabReg" onclick="switchTab('reg')">注册</div>
     </div>
 
+    <!-- 登录表单 -->
     <div class="card" id="loginFormCard">
       <h2>登录</h2>
       <div class="note" id="loginHint" style="margin-bottom:8px;">使用邮箱登录，一个账号通行全部应用。</div>
@@ -90,10 +93,12 @@
         <div class="cf-turnstile" data-sitekey="0x4AAAAAAFNdFDGD5uPcjBhh" data-callback="onTurnLogin"></div>
       </div>
       <button class="btn btn-primary" id="loginBtn" onclick="doLogin()" disabled>登录</button>
+      <button class="btn btn-secondary" id="passkeyLoginBtn" onclick="loginWithPasskey()">🔑 使用通行密钥登录</button>
       <div class="links"><a onclick="sendMagicLink()">发送魔法链接（免密码登录）</a></div>
       <div class="msg" id="loginMsg"></div>
     </div>
 
+    <!-- 注册表单 -->
     <div class="card hidden" id="regFormCard">
       <h2>注册</h2>
       <div class="note" style="margin-bottom:8px;">创建新账号，一个账号通行全部应用。</div>
@@ -108,6 +113,7 @@
     </div>
   </div>
 
+  <!-- 已登录 -->
   <div id="adminPage" class="hidden">
     <div class="card">
       <div class="avatar">👤</div>
@@ -121,6 +127,14 @@
       <button class="btn btn-secondary" onclick="openApp('wallet')">💰 积分钱包</button>
       <button class="btn btn-secondary" onclick="openApp('wrobook')">📕 错题本</button>
       <button class="btn btn-secondary" onclick="openApp('tanchi')">📝 TanchiNotes</button>
+    </div>
+
+    <div class="card">
+      <h2>🔑 通行密钥（Passkey）</h2>
+      <div class="note" style="margin-bottom:10px;">用设备生物识别 / PIN / 安全钥匙免密登录，防钓鱼。需先在 Supabase 后台 Authentication → Passkeys 开启。</div>
+      <div id="passkeyList" style="margin-bottom:10px;"></div>
+      <button class="btn btn-secondary" id="addPasskeyBtn" onclick="addPasskey()">创建通行密钥</button>
+      <div class="msg" id="passkeyMsg"></div>
     </div>
 
     <button class="btn btn-danger" onclick="doLogout()">退出登录</button>
@@ -161,6 +175,7 @@ function showMsg(id, text, ok) {
   el.className = "msg " + (ok ? "msg ok" : "msg err");
 }
 
+// ---------- tab 切换 ----------
 function switchTab(which) {
   var isLogin = which === "login";
   document.getElementById("tabLogin").classList.toggle("active", isLogin);
@@ -179,8 +194,94 @@ function showAdmin(user) {
   document.getElementById("adminPage").classList.remove("hidden");
   document.getElementById("adminEmail").textContent = user.email || "";
   document.getElementById("adminNick").textContent = user.name || user.email || "用户";
+  loadPasskeys();
 }
 
+// ---------- 通行密钥（Passkey / WebAuthn）----------
+function escHtml(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+async function loadPasskeys() {
+  var box = document.getElementById("passkeyList");
+  if (!box) return;
+  try {
+    var client = await sbInit();
+    if (!client.auth.passkey || typeof client.auth.passkey.list !== "function") {
+      box.innerHTML = '<div class="note">当前客户端版本不支持通行密钥，请升级 supabase-js。</div>';
+      return;
+    }
+    var { data, error } = await client.auth.passkey.list();
+    if (error) { box.innerHTML = ""; return; }
+    if (!data || !data.length) {
+      box.innerHTML = '<div class="note">尚未创建通行密钥。</div>';
+      return;
+    }
+    box.innerHTML = data.map(function (p) {
+      var name = p.friendly_name || "通行密钥";
+      var t = p.last_used_at
+        ? "上次使用 " + new Date(p.last_used_at).toLocaleDateString("zh-CN")
+        : "已创建 " + new Date(p.created_at).toLocaleDateString("zh-CN");
+      return '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.1);">'
+        + '<div><div style="font-size:14px;font-weight:bold;">' + escHtml(name) + '</div>'
+        + '<div style="font-size:12px;color:#a8a8d8;">' + escHtml(t) + '</div></div>'
+        + '<button class="btn btn-danger" style="width:auto;margin-top:0;padding:6px 12px;font-size:13px;" onclick="delPasskey(\'' + p.id + '\')">删除</button>'
+        + '</div>';
+    }).join("");
+  } catch (e) {
+    box.innerHTML = "";
+  }
+}
+
+async function addPasskey() {
+  var btn = document.getElementById("addPasskeyBtn");
+  try {
+    var client = await sbInit();
+    if (typeof client.auth.registerPasskey !== "function") {
+      showMsg("passkeyMsg", "当前客户端版本不支持通行密钥", false); return;
+    }
+    btn.disabled = true; btn.textContent = "正在创建…";
+    var { data, error } = await client.auth.registerPasskey();
+    if (error) throw error;
+    showMsg("passkeyMsg", "通行密钥创建成功！", true);
+    loadPasskeys();
+  } catch (e) {
+    showMsg("passkeyMsg", (e && e.message) || "创建失败（可能已取消，或后台未开启 Passkey）", false);
+  }
+  btn.disabled = false; btn.textContent = "创建通行密钥";
+}
+
+async function delPasskey(pid) {
+  if (!confirm("确定删除该通行密钥？")) return;
+  try {
+    var client = await sbInit();
+    var { error } = await client.auth.passkey.delete({ passkeyId: pid });
+    if (error) throw error;
+    showMsg("passkeyMsg", "已删除", true);
+    loadPasskeys();
+  } catch (e) {
+    showMsg("passkeyMsg", (e && e.message) || "删除失败", false);
+  }
+}
+
+async function loginWithPasskey() {
+  try {
+    var client = await sbInit();
+    if (typeof client.auth.signInWithPasskey !== "function") {
+      showMsg("loginMsg", "当前版本不支持通行密钥", false); return;
+    }
+    var { data, error } = await client.auth.signInWithPasskey();
+    if (error) throw error;
+    var u = await sbRefreshUser();
+    afterLogin(u);
+  } catch (e) {
+    showMsg("loginMsg", (e && e.message) || "通行密钥登录失败", false);
+  }
+}
+
+// ---------- 登录 ----------
 async function doLogin() {
   var email = document.getElementById("loginEmail").value.trim();
   var pw = document.getElementById("loginPw").value;
@@ -201,6 +302,7 @@ async function doLogin() {
   }
 }
 
+// ---------- 注册 ----------
 async function doRegister() {
   var email = document.getElementById("regEmail").value.trim();
   var pw = document.getElementById("regPw").value;
@@ -220,6 +322,7 @@ async function doRegister() {
       options: { emailRedirectTo: redirectTo }
     });
     if (error) throw error;
+    // 开启邮箱确认时 data.session 为空，需用户点邮件链接验证
     if (!data.session) {
       showMsg("regMsg", "注册成功！请检查收件箱（含垃圾邮件），点击验证邮件完成后再登录。", true);
       document.getElementById("regPw").value = "";
@@ -227,6 +330,7 @@ async function doRegister() {
       btn.disabled = false; btn.textContent = "注册";
       return;
     }
+    // 未开启邮箱确认：直接进入
     var u = await sbRefreshUser();
     afterLogin(u);
   } catch (e) {
@@ -256,6 +360,7 @@ async function sendMagicLink() {
 }
 
 function afterLogin(u) {
+  // 优先跳回原页面（return 参数需是同站或已注册的应用域名，防止开放重定向）
   if (RETURN_URL) {
     try {
       var ru = new URL(RETURN_URL, location.origin);
@@ -278,6 +383,7 @@ async function doLogout() {
 
 (async function () {
   try {
+    // 先处理回调（魔法链接 / 邮箱验证回跳）
     var result = await msHandleRedirect();
     if (result) { afterLogin(result); return; }
     var user = sbGetUser();
