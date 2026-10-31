@@ -24,6 +24,15 @@
     backdrop-filter:blur(10px);
   }
   .card h2 { font-size:16px; color:#ffd700; margin-bottom:16px; }
+  .tabs { display:flex; gap:8px; margin-bottom:16px; }
+  .tab {
+    flex:1; padding:11px 0; text-align:center; border-radius:10px; cursor:pointer;
+    font-size:15px; font-weight:bold; background:rgba(255,255,255,0.06);
+    border:1px solid rgba(255,255,255,0.12); color:#a8a8d8; transition:0.15s;
+  }
+  .tab.active {
+    background:linear-gradient(135deg,#ffd700,#ff8822); color:#1a1a2e; border-color:transparent;
+  }
   input {
     width:100%; padding:12px; border-radius:10px;
     border:1px solid rgba(255,255,255,0.2);
@@ -56,6 +65,7 @@
   .note { font-size:13px; color:#a8a8d8; line-height:1.7; }
   .links { text-align:center; margin-top:12px; font-size:13px; }
   .links a { color:#4ecdc4; cursor:pointer; text-decoration:underline; }
+  .turnstile-wrap { margin:14px 0 2px; display:flex; justify-content:center; }
 </style>
 </head>
 <body>
@@ -65,20 +75,39 @@
     <p id="pageSubtitle">账号管理中心</p>
   </div>
 
-  <!-- 未登录 -->
   <div id="loginPage" class="hidden">
-    <div class="card">
+    <div class="tabs">
+      <div class="tab active" id="tabLogin" onclick="switchTab('login')">登录</div>
+      <div class="tab" id="tabReg" onclick="switchTab('reg')">注册</div>
+    </div>
+
+    <div class="card" id="loginFormCard">
       <h2>登录</h2>
       <div class="note" id="loginHint" style="margin-bottom:8px;">使用邮箱登录，一个账号通行全部应用。</div>
       <input type="email" id="loginEmail" placeholder="邮箱地址" autocomplete="username">
-      <input type="password" id="loginPw" placeholder="密码（新用户自动注册）" autocomplete="current-password">
-      <button class="btn btn-primary" id="loginBtn" onclick="doLogin()">登录 / 注册</button>
+      <input type="password" id="loginPw" placeholder="密码" autocomplete="current-password">
+      <div class="turnstile-wrap">
+        <div class="cf-turnstile" data-sitekey="0x4AAAAAAFNdFDGD5uPcjBhh" data-callback="onTurnLogin"></div>
+      </div>
+      <button class="btn btn-primary" id="loginBtn" onclick="doLogin()" disabled>登录</button>
       <div class="links"><a onclick="sendMagicLink()">发送魔法链接（免密码登录）</a></div>
       <div class="msg" id="loginMsg"></div>
     </div>
+
+    <div class="card hidden" id="regFormCard">
+      <h2>注册</h2>
+      <div class="note" style="margin-bottom:8px;">创建新账号，一个账号通行全部应用。</div>
+      <input type="email" id="regEmail" placeholder="邮箱地址" autocomplete="username">
+      <input type="password" id="regPw" placeholder="设置密码（至少 6 位）" autocomplete="new-password">
+      <input type="password" id="regPw2" placeholder="确认密码" autocomplete="new-password">
+      <div class="turnstile-wrap">
+        <div class="cf-turnstile" data-sitekey="0x4AAAAAAFNdFDGD5uPcjBhh" data-callback="onTurnReg"></div>
+      </div>
+      <button class="btn btn-primary" id="regBtn" onclick="doRegister()" disabled>注册</button>
+      <div class="msg" id="regMsg"></div>
+    </div>
   </div>
 
-  <!-- 已登录 -->
   <div id="adminPage" class="hidden">
     <div class="card">
       <div class="avatar">👤</div>
@@ -99,6 +128,7 @@
   </div>
 </div>
 
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <script src="sbauth.js?v=20261030"></script>
 <script>
 const Q = new URLSearchParams(location.search);
@@ -112,6 +142,11 @@ const APP_URLS = {
   tanchi: "https://tanchi.r6t5.dpdns.org"
 };
 
+let turnLoginToken = null;
+let turnRegToken = null;
+function onTurnLogin(token) { turnLoginToken = token; document.getElementById("loginBtn").disabled = false; }
+function onTurnReg(token) { turnRegToken = token; document.getElementById("regBtn").disabled = false; }
+
 if (APP && APP_NAMES[APP]) {
   document.getElementById("pageTitle").textContent = "🔐 登录";
   document.getElementById("pageSubtitle").textContent = "登录以继续使用" + APP_NAMES[APP];
@@ -124,6 +159,14 @@ function showMsg(id, text, ok) {
   if (!el) return;
   el.textContent = text;
   el.className = "msg " + (ok ? "msg ok" : "msg err");
+}
+
+function switchTab(which) {
+  var isLogin = which === "login";
+  document.getElementById("tabLogin").classList.toggle("active", isLogin);
+  document.getElementById("tabReg").classList.toggle("active", !isLogin);
+  document.getElementById("loginFormCard").classList.toggle("hidden", !isLogin);
+  document.getElementById("regFormCard").classList.toggle("hidden", isLogin);
 }
 
 function showLogin() {
@@ -144,26 +187,56 @@ async function doLogin() {
   var btn = document.getElementById("loginBtn");
   if (!email || !email.includes("@")) { showMsg("loginMsg", "请输入有效邮箱", false); return; }
   if (!pw) { showMsg("loginMsg", "请输入密码", false); return; }
+  if (!turnLoginToken) { showMsg("loginMsg", "请先完成安全验证", false); return; }
   btn.disabled = true; btn.textContent = "登录中…";
   try {
     var client = await sbInit();
     var { data, error } = await client.auth.signInWithPassword({ email: email, password: pw });
-    if (error) {
-      if (error.message && error.message.indexOf("Invalid") >= 0) {
-        var su = await client.auth.signUp({ email: email, password: pw });
-        if (su.error) throw su.error;
-        if (!su.data.session) {
-          showMsg("loginMsg", "注册成功，请查收邮箱验证后再登录", true);
-          btn.disabled = false; btn.textContent = "登录 / 注册";
-          return;
-        }
-      } else throw error;
+    if (error) throw error;
+    var u = await sbRefreshUser();
+    afterLogin(u);
+  } catch (e) {
+    showMsg("loginMsg", (e && e.message) || "登录失败，邮箱或密码错误", false);
+    btn.disabled = false; btn.textContent = "登录";
+  }
+}
+
+async function doRegister() {
+  var email = document.getElementById("regEmail").value.trim();
+  var pw = document.getElementById("regPw").value;
+  var pw2 = document.getElementById("regPw2").value;
+  var btn = document.getElementById("regBtn");
+  if (!email || !email.includes("@")) { showMsg("regMsg", "请输入有效邮箱", false); return; }
+  if (pw.length < 6) { showMsg("regMsg", "密码至少 6 位", false); return; }
+  if (pw !== pw2) { showMsg("regMsg", "两次输入的密码不一致", false); return; }
+  if (!turnRegToken) { showMsg("regMsg", "请先完成安全验证", false); return; }
+  btn.disabled = true; btn.textContent = "注册中…";
+  try {
+    var client = await sbInit();
+    var redirectTo = location.origin + "/?app=" + (APP || "");
+    var { data, error } = await client.auth.signUp({
+      email: email,
+      password: pw,
+      options: { emailRedirectTo: redirectTo }
+    });
+    if (error) throw error;
+    if (!data.session) {
+      showMsg("regMsg", "注册成功！请检查收件箱（含垃圾邮件），点击验证邮件完成后再登录。", true);
+      document.getElementById("regPw").value = "";
+      document.getElementById("regPw2").value = "";
+      btn.disabled = false; btn.textContent = "注册";
+      return;
     }
     var u = await sbRefreshUser();
     afterLogin(u);
   } catch (e) {
-    showMsg("loginMsg", e.message || "登录失败", false);
-    btn.disabled = false; btn.textContent = "登录 / 注册";
+    var msg = (e && e.message) || "注册失败";
+    if (msg.indexOf("already") >= 0 || msg.indexOf("registered") >= 0) {
+      msg = "该邮箱已注册，请直接登录";
+      switchTab("login");
+    }
+    showMsg("regMsg", msg, false);
+    btn.disabled = false; btn.textContent = "注册";
   }
 }
 
@@ -178,12 +251,11 @@ async function sendMagicLink() {
     });
     showMsg("loginMsg", "已发送登录链接到邮箱，请查收", true);
   } catch (e) {
-    showMsg("loginMsg", e.message || "发送失败", false);
+    showMsg("loginMsg", (e && e.message) || "发送失败", false);
   }
 }
 
 function afterLogin(u) {
-  // 优先跳回原页面（return 参数需是同站或已注册的应用域名，防止开放重定向）
   if (RETURN_URL) {
     try {
       var ru = new URL(RETURN_URL, location.origin);
@@ -206,7 +278,6 @@ async function doLogout() {
 
 (async function () {
   try {
-    // 先处理回调（魔法链接回跳）
     var result = await msHandleRedirect();
     if (result) { afterLogin(result); return; }
     var user = sbGetUser();
