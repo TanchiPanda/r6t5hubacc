@@ -80,32 +80,6 @@
   .node-picker select option { background:#1a1a2e; color:#fff; }
   .node-picker.locked { opacity:0.6; cursor:not-allowed; }
   .node-picker.locked select { cursor:not-allowed; }
-  .fallback-wrap { display:none; margin:14px 0 2px; }
-  .fallback-wrap.visible { display:block; }
-  .slider-track {
-    position:relative; height:44px; background:#2a2a4a;
-    border:1px solid rgba(255,255,255,0.15); border-radius:10px;
-    overflow:hidden; user-select:none;
-  }
-  .slider-track .slider-text {
-    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
-    font-size:13px; color:#8888bb; pointer-events:none;
-  }
-  .slider-track .slider-fill {
-    position:absolute; left:0; top:0; bottom:0; width:0;
-    background:rgba(78,205,196,0.2); transition:background 0.2s;
-  }
-  .slider-track.verified .slider-fill { background:rgba(57,217,138,0.3); }
-  .slider-handle {
-    position:absolute; top:3px; left:3px; width:38px; height:38px;
-    background:linear-gradient(135deg,#ffd700,#ff8822); color:#1a1a2e;
-    border-radius:8px; display:flex; align-items:center; justify-content:center;
-    font-size:18px; font-weight:bold; cursor:grab; box-shadow:0 2px 6px rgba(0,0,0,0.3);
-    transition:left 0.1s; touch-action:none;
-  }
-  .slider-handle:active { cursor:grabbing; }
-  .slider-track.verified .slider-handle { background:#39d98a; color:#fff; cursor:default; }
-  .fallback-note { font-size:11px; color:#a8a8d8; margin-top:6px; text-align:center; }
 </style>
 </head>
 <body>
@@ -140,19 +114,8 @@
       <div class="note" id="loginHint" style="margin-bottom:8px;">使用邮箱登录，一个账号通行全部应用。</div>
       <input type="email" id="loginEmail" placeholder="邮箱地址" autocomplete="username">
       <input type="password" id="loginPw" placeholder="密码" autocomplete="current-password">
-      <div class="turnstile-wrap" id="loginTurnstileWrap">
-        <div class="cf-turnstile" data-sitekey="0x4AAAAAAFNdFDGD5uPcjBhh" data-callback="onTurnLogin" data-error-callback="onTurnError"></div>
-      </div>
-      <div class="fallback-wrap" id="loginFallbackWrap">
-        <div class="note" style="font-size:12px;margin-bottom:8px;color:#ffb84d;">
-          ⚠️ 人机验证组件加载失败，已切换到滑块验证（每个设备每日 5 次）
-        </div>
-        <div class="slider-track" id="loginSliderTrack">
-          <div class="slider-fill"></div>
-          <div class="slider-text">➡️ 按住滑块拖动到最右侧</div>
-          <div class="slider-handle" id="loginSliderHandle">›</div>
-        </div>
-        <div class="fallback-note" id="loginFallbackCount"></div>
+      <div class="turnstile-wrap">
+        <div class="cf-turnstile" data-sitekey="0x4AAAAAAFNdFDGD5uPcjBhh" data-callback="onTurnLogin"></div>
       </div>
       <button class="btn btn-primary" id="loginBtn" onclick="doLogin()" disabled>登录</button>
       <button class="btn btn-secondary" id="passkeyLoginBtn" onclick="loginWithPasskey()">🔑 使用通行密钥登录</button>
@@ -222,87 +185,6 @@ let turnRegToken = null;
 function onTurnLogin(token) { turnLoginToken = token; document.getElementById("loginBtn").disabled = false; }
 function onTurnReg(token) { turnRegToken = token; document.getElementById("regBtn").disabled = false; }
 
-// ---------- cn 节点滑块降级 ----------
-const FALLBACK_LIMIT = 5;
-function _fbKey() {
-  var d = new Date().toISOString().slice(0, 10);
-  return "wordGameFallback_" + d;
-}
-function _fbCount() {
-  try { return parseInt(localStorage.getItem(_fbKey()) || "0", 10) || 0; }
-  catch (e) { return 0; }
-}
-function _fbInc() {
-  try { localStorage.setItem(_fbKey(), String(_fbCount() + 1)); } catch (e) {}
-}
-
-function onTurnError() {
-  if (!IS_CN_NODE) return;
-  var used = _fbCount();
-  if (used >= FALLBACK_LIMIT) {
-    showMsg("loginMsg", "今日降级验证次数已用完，请稍后再试或切到国际节点", false);
-    return;
-  }
-  var ts = document.getElementById("loginTurnstileWrap");
-  var fb = document.getElementById("loginFallbackWrap");
-  if (ts) ts.style.display = "none";
-  if (fb) fb.classList.add("visible");
-  var cnt = document.getElementById("loginFallbackCount");
-  if (cnt) cnt.textContent = "今日已用 " + used + " / " + FALLBACK_LIMIT + " 次";
-}
-
-(function initSlider() {
-  var track = document.getElementById("loginSliderTrack");
-  var handle = document.getElementById("loginSliderHandle");
-  if (!track || !handle) return;
-  var dragging = false, startX = 0, currentX = 0;
-  function setHandle(x) {
-    var max = track.clientWidth - handle.offsetWidth - 6;
-    if (x < 0) x = 0;
-    if (x > max) x = max;
-    handle.style.left = (3 + x) + "px";
-    currentX = x;
-    var pct = max > 0 ? (x / max) * 100 : 0;
-    track.querySelector(".slider-fill").style.width = pct + "%";
-  }
-  function onStart(e) {
-    if (track.classList.contains("verified")) return;
-    dragging = true;
-    var pt = e.touches ? e.touches[0] : e;
-    startX = pt.clientX - currentX;
-    e.preventDefault();
-  }
-  function onMove(e) {
-    if (!dragging) return;
-    var pt = e.touches ? e.touches[0] : e;
-    setHandle(pt.clientX - startX);
-  }
-  function onEnd() {
-    if (!dragging) return;
-    dragging = false;
-    var max = track.clientWidth - handle.offsetWidth - 6;
-    if (max > 0 && currentX / max >= 0.92) {
-      track.classList.add("verified");
-      handle.textContent = "✓";
-      track.querySelector(".slider-text").textContent = "验证通过";
-      turnLoginToken = "fallback_v1";
-      _fbInc();
-      document.getElementById("loginBtn").disabled = false;
-      document.getElementById("loginBtn").textContent = "登录";
-      var cnt = document.getElementById("loginFallbackCount");
-      if (cnt) cnt.textContent = "已通过（今日第 " + _fbCount() + " 次）";
-    } else {
-      setHandle(0);
-    }
-  }
-  handle.addEventListener("mousedown", onStart);
-  handle.addEventListener("touchstart", onStart, { passive: false });
-  document.addEventListener("mousemove", onMove);
-  document.addEventListener("touchmove", onMove, { passive: false });
-  document.addEventListener("mouseup", onEnd);
-  document.addEventListener("touchend", onEnd);
-})();
-
 const NODE_LABEL = IS_CN_NODE ? "🇨🇳 中国大陆服务器" : "🇺🇸 国际服务器";
 const NODE_FLAG  = IS_CN_NODE ? "🇨🇳" : "🇺🇸";
 
@@ -359,19 +241,23 @@ function renderAccountPicker() {
   var hintEl = document.getElementById("pickerHint");
   var titleEl = document.getElementById("pickerTitle");
   if (!listEl) return;
+
   var targetNode = IS_CN_NODE ? "cn" : "us";
   var sameNode = arr.filter(r => r.node === targetNode);
   var otherNode = arr.filter(r => r.node !== targetNode);
+
   titleEl.textContent = "选择账号（" + NODE_LABEL + "）";
   if (APP && APP_NAMES[APP]) {
     hintEl.textContent = "正在登录" + APP_NAMES[APP] + "（" + NODE_LABEL + "）。选择已有账号继续，或添加新账号。";
   } else {
     hintEl.textContent = "选择一个账号继续，或使用其他账号登录。";
   }
+
   if (!arr.length) {
     listEl.innerHTML = '<div class="note" style="text-align:center;padding:10px 0;">本地暂无已登录账号</div>';
     return;
   }
+
   function row(r) {
     var u = r.user || {};
     var name = u.name || u.email || "用户";
@@ -389,6 +275,7 @@ function renderAccountPicker() {
       + '<button class="btn btn-danger" style="width:auto;margin:0;padding:4px 10px;font-size:12px;" onclick="event.stopPropagation();removeAccount(\'' + email.replace(/'/g, "\\'") + '\')">✕</button>'
       + '</div>';
   }
+
   listEl.innerHTML = sameNode.map(row).join("") + (otherNode.length ? '<div class="note" style="margin:8px 0 4px;font-size:12px;">其他节点账号</div>' + otherNode.map(row).join("") : "");
 }
 
