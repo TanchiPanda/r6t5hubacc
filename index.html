@@ -66,9 +66,30 @@
   .links { text-align:center; margin-top:12px; font-size:13px; }
   .links a { color:#4ecdc4; cursor:pointer; text-decoration:underline; }
   .turnstile-wrap { margin:14px 0 2px; display:flex; justify-content:center; }
+  .node-picker {
+    position:fixed; top:14px; right:14px; z-index:100;
+    display:flex; align-items:center; gap:6px;
+    background:rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.15);
+    border-radius:999px; padding:6px 12px; font-size:13px; color:#fff;
+    backdrop-filter:blur(8px);
+  }
+  .node-picker select {
+    background:transparent; color:#fff; border:none; font-size:13px;
+    cursor:pointer; outline:none; font-family:inherit;
+  }
+  .node-picker select option { background:#1a1a2e; color:#fff; }
+  .node-picker.locked { opacity:0.6; cursor:not-allowed; }
+  .node-picker.locked select { cursor:not-allowed; }
 </style>
 </head>
 <body>
+<div class="node-picker" id="nodePicker">
+  <span>🌐</span>
+  <select id="nodeSelect" onchange="switchNode(this.value)">
+    <option value="us">🇺🇸 国际服务器</option>
+    <option value="cn">🇨🇳 中国大陆</option>
+  </select>
+</div>
 <div class="container">
   <div class="header">
     <h1 id="pageTitle">⚡ R6T5 Hub</h1>
@@ -166,6 +187,24 @@ function onTurnReg(token) { turnRegToken = token; document.getElementById("regBt
 
 const NODE_LABEL = IS_CN_NODE ? "🇨🇳 中国大陆服务器" : "🇺🇸 国际服务器";
 const NODE_FLAG  = IS_CN_NODE ? "🇨🇳" : "🇺🇸";
+
+// 右上角服务器选择：URL 已显式指定 country 时锁定（来自应用跳转）
+(function initNodePicker() {
+  var hasCountryParam = Q.get("country") === "cn" || Q.get("country") === "intl" || Q.get("country") === "cf";
+  var retHasCn = (Q.get("return") || "").match(/[?&]country=cn/);
+  var locked = hasCountryParam || retHasCn;
+  var sel = document.getElementById("nodeSelect");
+  sel.value = IS_CN_NODE ? "cn" : "us";
+  sel.disabled = locked;
+  if (locked) document.getElementById("nodePicker").classList.add("locked");
+})();
+
+function switchNode(v) {
+  var url = new URL(location.href);
+  if (v === "cn") url.searchParams.set("country", "cn");
+  else url.searchParams.set("country", "cf");
+  location.href = url.toString();
+}
 
 if (IS_CN_NODE) {
   document.getElementById("passkeyLoginBtn").style.display = "none";
