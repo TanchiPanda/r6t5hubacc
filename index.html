@@ -517,156 +517,146 @@ function openApp(id) {
   if (APP_URLS[id]) location.href = APP_URLS[id];
 }
 
-// ---------- TOTP 二步验证（仅国际节点） ----------
-const _B32_ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-function _b32decode(s) {
-  s = (s || "").toUpperCase().replace(/[^A-Z2-7]/g, "");
-  let bits = "", bytes = [];
-  for (const c of s) bits += _B32_ALPHA.indexOf(c).toString(2).padStart(5, "0");
-  for (let i = 0; i + 8 <= bits.length; i += 8) bytes.push(parseInt(bits.slice(i, i + 8), 2));
-  return new Uint8Array(bytes);
-}
-function _b32encode(bytes) {
-  let bits = "";
-  for (const b of bytes) bits += b.toString(2).padStart(8, "0");
-  let out = "";
-  for (let i = 0; i + 5 <= bits.length; i += 5) out += _B32_ALPHA[parseInt(bits.slice(i, i + 5), 2)];
-  return out;
-}
-async function _totpVerify(secretB32, code) {
-  code = (code || "").replace(/\D/g, "");
-  if (code.length !== 6) return false;
-  for (let drift = -1; drift <= 1; drift++) {
-    const counter = Math.floor(Date.now()/1000/30) + drift;
-    const keyBytes = _b32decode(secretB32);
-    const buf = new ArrayBuffer(8);
-    const dv = new DataView(buf);
-    dv.setUint32(0, Math.floor(counter / 0x100000000));
-    dv.setUint32(4, counter >>> 0);
-    const key = await crypto.subtle.importKey("raw", keyBytes, { name: "HMAC", hash: "SHA-1" }, false, ["sign"]);
-    const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, buf));
-    const offset = sig[sig.length - 1] & 0x0f;
-    const bin = ((sig[offset] & 0x7f) << 24) | (sig[offset+1] << 16) | (sig[offset+2] << 8) | sig[offset+3];
-    if ((bin % 1000000).toString().padStart(6, "0") === code) return true;
-  }
-  return false;
-}
-function _genTotpSecret() {
-  const arr = new Uint8Array(20);
-  crypto.getRandomValues(arr);
-  return _b32encode(arr);
-}
-function _activeUserRec() {
-  const arr = (typeof sbListUsers === "function") ? sbListUsers() : [];
-  const email = (function(){ try { return localStorage.getItem("wordGameActiveEmail"); } catch(e){ return null; }})();
-  return arr.find(r => r.user && r.user.email === email) || null;
-}
-function _saveTotpFor(email, secret) {
-  const arr = (typeof sbListUsers === "function") ? sbListUsers() : [];
-  for (const r of arr) {
-    if (r.user && r.user.email === email) {
-      r.totpSecret = secret || "";
-      try { localStorage.setItem("wordGameUsersArr", JSON.stringify(arr)); } catch(e){}
-      return;
-    }
-  }
-}
+// ---------- Supabase MFA（服务端 TOTP 二步验证，仅国际节点） ----------
+let _currentFactorId = "";
 function _trustKey(email) { return "wordGameTrust_" + email; }
 function _isTrusted(email) {
-  try {
-    const v = parseInt(localStorage.getItem(_trustKey(email)) || "0", 10);
-    return v > Date.now();
-  } catch(e) { return false; }
+  try { return parseInt(localStorage.getItem(_trustKey(email)) || "0", 10) > Date.now(); }
+  catch(e) { return false; }
 }
 function _setTrust(email, days) {
   try { localStorage.setItem(_trustKey(email), String(Date.now() + days*864e5)); } catch(e){}
 }
-let _pendingTotpSecret = "";
+async function _getVerifiedFactor(client) {
+  if (!client.auth.mfa || typeof client.auth.mfa.listFactors !== "function") return null;
+  const { data } = await client.auth.mfa.listFactors();
+  const totp = (data && data.totp) || [];
+  return totp.find(f => f.status === "verified") || null;
+}
 function _renderTotpCard() {
-  const rec = _activeUserRec();
-  const secret = rec && rec.totpSecret;
-  const btn = document.getElementById("totpToggleBtn");
-  const box = document.getElementById("totpSetupBox");
-  const status = document.getElementById("totpStatus");
-  if (secret) {
-    status.innerHTML = "✅ 二步验证已开启。每次登录或切换账号需输入 6 位动态码。";
-    btn.textContent = "关闭二步验证";
-    box.style.display = "none";
-  } else {
-    status.innerHTML = "使用 Google Authenticator / Microsoft Authenticator 扫码绑定。每次登录或切换账号时需输入 6 位动态码。";
-    btn.textContent = "开启二步验证";
-    box.style.display = "none";
-  }
+  (async () => {
+    const status = document.getElementById("totpStatus");
+    const btn = document.getElementById("totpToggleBtn");
+    const box = document.getElementById("totpSetupBox");
+    try {
+      const client = await sbInit();
+      if (!client.auth.mfa || typeof client.auth.mfa.listFactors !== "function") {
+        status.innerHTML = "⚠️ 当前 Supabase 客户端版本不支持 MFA，或后台未启用 TOTP。";
+        btn.style.display = "none";
+        return;
+      }
+      const v = await _getVerifiedFactor(client);
+      if (v) {
+        status.innerHTML = "✅ 二步验证已开启（" + (v.friendly_name || "已绑定设备") + "）。每次登录需输入 6 位动态码。";
+        btn.textContent = "关闭二步验证";
+        box.style.display = "none";
+      } else {
+        status.innerHTML = "使用 Google Authenticator / Microsoft Authenticator 扫码绑定。每次登录或切换账号时需输入 6 位动态码。";
+        btn.textContent = "开启二步验证";
+        btn.style.display = "";
+        box.style.display = "none";
+      }
+    } catch(e) {
+      status.innerHTML = "⚠️ 读取 2FA 状态失败：" + ((e && e.message) || e);
+    }
+  })();
 }
 async function toggle2FA() {
-  const rec = _activeUserRec();
-  if (!rec || !rec.user || !rec.user.email) return;
-  const email = rec.user.email;
+  const btn = document.getElementById("totpToggleBtn");
   const box = document.getElementById("totpSetupBox");
-  if (rec.totpSecret) {
-    const code = prompt("关闭二步验证：请输入 Authenticator 上当前的 6 位数字");
-    if (!code) return;
-    const ok = await _totpVerify(rec.totpSecret, code);
-    if (!ok) { showMsg("totpMsg", "验证码错误，未关闭", false); return; }
-    _saveTotpFor(email, "");
-    showMsg("totpMsg", "已关闭二步验证", true);
-    _renderTotpCard();
-    return;
+  try {
+    const client = await sbInit();
+    if (!client.auth.mfa) { showMsg("totpMsg", "当前版本不支持 MFA", false); return; }
+    const v = await _getVerifiedFactor(client);
+    if (v) {
+      const code = prompt("关闭二步验证：请输入 Authenticator 上当前的 6 位数字");
+      if (!code) return;
+      const { data: ch, error: chErr } = await client.auth.mfa.challenge({ factorId: v.id });
+      if (chErr) throw chErr;
+      const { error: vErr } = await client.auth.mfa.verify({ factorId: v.id, challengeId: ch.id, code });
+      if (vErr) throw vErr;
+      const { error } = await client.auth.mfa.unenroll({ factorId: v.id });
+      if (error) throw error;
+      showMsg("totpMsg", "已关闭二步验证", true);
+      _renderTotpCard();
+      return;
+    }
+    btn.disabled = true; btn.textContent = "生成密钥中…";
+    const { data, error } = await client.auth.mfa.enroll({
+      factorType: "totp",
+      friendlyName: (new Date()).toLocaleString("zh-CN")
+    });
+    if (error) throw error;
+    _currentFactorId = data.id;
+    const otpUrl = data.totp.qr_code;
+    document.getElementById("totpQrImg").src = "https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=" + encodeURIComponent(otpUrl);
+    document.getElementById("totpSecretText").textContent = "或手动输入密钥：" + data.totp.secret;
+    box.style.display = "block";
+    document.getElementById("totpStatus").innerHTML = "用 Authenticator 扫码或手动输入上面的密钥，然后输入 App 上显示的 6 位数字完成绑定。";
+    showMsg("totpMsg", "");
+  } catch(e) {
+    showMsg("totpMsg", (e && e.message) || "开启失败（请确认 Supabase 后台已启用 MFA）", false);
   }
-  _pendingTotpSecret = _genTotpSecret();
-  const label = encodeURIComponent("R6T5 Hub (" + email + ")");
-  const issuer = encodeURIComponent("R6T5 Hub");
-  const otp = "otpauth://totp/" + label + "?secret=" + _pendingTotpSecret + "&issuer=" + issuer + "&digits=6&period=30";
-  document.getElementById("totpQrImg").src = "https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=" + encodeURIComponent(otp);
-  document.getElementById("totpSecretText").textContent = "或手动输入密钥：" + _pendingTotpSecret;
-  box.style.display = "block";
-  document.getElementById("totpStatus").innerHTML = "用 Authenticator 扫码或手动输入上面的密钥，然后输入 App 上显示的 6 位数字完成绑定。";
-  showMsg("totpMsg", "");
+  btn.disabled = false; btn.textContent = "开启二步验证";
 }
 async function confirm2FA() {
   const code = document.getElementById("totpConfirmCode").value.trim();
-  const rec = _activeUserRec();
-  if (!rec || !rec.user) return;
-  const ok = await _totpVerify(_pendingTotpSecret, code);
-  if (!ok) { showMsg("totpMsg", "验证码错误，请检查时间并重试", false); return; }
-  _saveTotpFor(rec.user.email, _pendingTotpSecret);
-  _pendingTotpSecret = "";
-  showMsg("totpMsg", "二步验证已开启", true);
-  _renderTotpCard();
+  if (!_currentFactorId) return;
+  try {
+    const client = await sbInit();
+    const { data: ch, error: chErr } = await client.auth.mfa.challenge({ factorId: _currentFactorId });
+    if (chErr) throw chErr;
+    const { error } = await client.auth.mfa.verify({ factorId: _currentFactorId, challengeId: ch.id, code });
+    if (error) throw error;
+    _currentFactorId = "";
+    showMsg("totpMsg", "二步验证已开启", true);
+    _renderTotpCard();
+  } catch(e) {
+    showMsg("totpMsg", (e && e.message) || "验证码错误，请检查时间并重试", false);
+  }
 }
 function _prompt2FAIfNeeded(user, onOk) {
-  const rec = (typeof sbListUsers === "function" ? sbListUsers() : []).find(r => r.user && r.user.email === (user && user.email));
-  const secret = rec && rec.totpSecret;
-  if (!secret) { onOk(); return; }
-  if (_isTrusted(user.email)) { onOk(); return; }
-  const modal = document.createElement("div");
-  modal.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;";
-  modal.innerHTML =
-    '<div style="background:#1a1a2e;border:1px solid rgba(255,255,255,0.15);border-radius:16px;padding:24px;max-width:360px;width:100%;color:#fff;">'
-    + '<h3 style="color:#ffd700;margin-bottom:8px;">📱 二步验证</h3>'
-    + '<p style="font-size:13px;color:#a8a8d8;margin-bottom:14px;">打开 Authenticator 输入 6 位数字</p>'
-    + '<input id="totpModalCode" maxlength="6" inputmode="numeric" placeholder="------" style="width:100%;padding:14px;border-radius:10px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.08);color:#fff;font-size:24px;text-align:center;letter-spacing:8px;" />'
-    + '<label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;color:#a8a8d8;cursor:pointer;"><input type="checkbox" id="totpModalTrust" style="width:auto;margin:0;" /> 信任此设备 30 天</label>'
-    + '<div id="totpModalErr" style="color:#ff8888;font-size:12px;margin-top:8px;min-height:16px;"></div>'
-    + '<button id="totpModalSubmit" class="btn btn-primary" style="margin-top:8px;">验证并继续</button>'
-    + '<button id="totpModalCancel" class="btn btn-secondary" style="margin-top:6px;">取消</button>'
-    + '</div>';
-  document.body.appendChild(modal);
-  setTimeout(() => document.getElementById("totpModalCode").focus(), 50);
-  const submit = async () => {
-    const code = document.getElementById("totpModalCode").value.trim();
-    const ok = await _totpVerify(secret, code);
-    if (!ok) {
-      document.getElementById("totpModalErr").textContent = "验证码错误，请重试";
-      return;
+  (async () => {
+    try {
+      const client = await sbInit();
+      if (!client.auth.mfa) { onOk(); return; }
+      const v = await _getVerifiedFactor(client);
+      if (!v) { onOk(); return; }
+      const modal = document.createElement("div");
+      modal.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;";
+      modal.innerHTML =
+        '<div style="background:#1a1a2e;border:1px solid rgba(255,255,255,0.15);border-radius:16px;padding:24px;max-width:360px;width:100%;color:#fff;">'
+        + '<h3 style="color:#ffd700;margin-bottom:8px;">📱 二步验证</h3>'
+        + '<p style="font-size:13px;color:#a8a8d8;margin-bottom:14px;">打开 Authenticator 输入 6 位数字</p>'
+        + '<input id="totpModalCode" maxlength="6" inputmode="numeric" placeholder="------" style="width:100%;padding:14px;border-radius:10px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.08);color:#fff;font-size:24px;text-align:center;letter-spacing:8px;" />'
+        + '<label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;color:#a8a8d8;cursor:pointer;"><input type="checkbox" id="totpModalTrust" style="width:auto;margin:0;" /> 信任此设备 30 天</label>'
+        + '<div id="totpModalErr" style="color:#ff8888;font-size:12px;margin-top:8px;min-height:16px;"></div>'
+        + '<button id="totpModalSubmit" class="btn btn-primary" style="margin-top:8px;">验证并继续</button>'
+        + '<button id="totpModalCancel" class="btn btn-secondary" style="margin-top:6px;">取消</button>'
+        + '</div>';
+      document.body.appendChild(modal);
+      setTimeout(() => document.getElementById("totpModalCode").focus(), 50);
+      const submit = async () => {
+        const code = document.getElementById("totpModalCode").value.trim();
+        try {
+          const { data: ch, error: chErr } = await client.auth.mfa.challenge({ factorId: v.id });
+          if (chErr) throw chErr;
+          const { error } = await client.auth.mfa.verify({ factorId: v.id, challengeId: ch.id, code });
+          if (error) throw error;
+          if (document.getElementById("totpModalTrust").checked && user && user.email) _setTrust(user.email, 30);
+          document.body.removeChild(modal);
+          onOk();
+        } catch(e) {
+          document.getElementById("totpModalErr").textContent = (e && e.message) || "验证码错误，请重试";
+        }
+      };
+      document.getElementById("totpModalSubmit").onclick = submit;
+      document.getElementById("totpModalCancel").onclick = () => { document.body.removeChild(modal); showLogin(); };
+      document.getElementById("totpModalCode").addEventListener("keydown", e => { if (e.key === "Enter") submit(); });
+    } catch(e) {
+      onOk();
     }
-    if (document.getElementById("totpModalTrust").checked) _setTrust(user.email, 30);
-    document.body.removeChild(modal);
-    onOk();
-  };
-  document.getElementById("totpModalSubmit").onclick = submit;
-  document.getElementById("totpModalCancel").onclick = () => { document.body.removeChild(modal); showLogin(); };
-  document.getElementById("totpModalCode").addEventListener("keydown", e => { if (e.key === "Enter") submit(); });
+  })();
 }
 
 async function switchAccount() {
