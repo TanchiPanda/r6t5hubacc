@@ -24,7 +24,6 @@
     backdrop-filter:blur(10px);
   }
   .card h2 { font-size:16px; color:#ffd700; margin-bottom:16px; }
-  /* tab 切换 */
   .tabs { display:flex; gap:8px; margin-bottom:16px; }
   .tab {
     flex:1; padding:11px 0; text-align:center; border-radius:10px; cursor:pointer;
@@ -76,14 +75,19 @@
     <p id="pageSubtitle">账号管理中心</p>
   </div>
 
-  <!-- 未登录 -->
   <div id="loginPage" class="hidden">
-    <div class="tabs">
+    <div class="card" id="accountPickerCard">
+      <h2 id="pickerTitle">选择账号</h2>
+      <div class="note" id="pickerHint" style="margin-bottom:10px;"></div>
+      <div id="accountList"></div>
+      <button class="btn btn-secondary" id="addAccountBtn" onclick="showLoginForm()">+ 登录 / 添加另一个账号</button>
+    </div>
+
+    <div class="tabs" id="authTabs">
       <div class="tab active" id="tabLogin" onclick="switchTab('login')">登录</div>
       <div class="tab" id="tabReg" onclick="switchTab('reg')">注册</div>
     </div>
 
-    <!-- 登录表单 -->
     <div class="card" id="loginFormCard">
       <h2>登录</h2>
       <div class="note" id="loginHint" style="margin-bottom:8px;">使用邮箱登录，一个账号通行全部应用。</div>
@@ -94,11 +98,10 @@
       </div>
       <button class="btn btn-primary" id="loginBtn" onclick="doLogin()" disabled>登录</button>
       <button class="btn btn-secondary" id="passkeyLoginBtn" onclick="loginWithPasskey()">🔑 使用通行密钥登录</button>
-      <div class="links"><a onclick="sendMagicLink()">发送魔法链接（免密码登录）</a></div>
+      <div class="links" id="magicLinkRow"><a onclick="sendMagicLink()">发送魔法链接（免密码登录）</a></div>
       <div class="msg" id="loginMsg"></div>
     </div>
 
-    <!-- 注册表单 -->
     <div class="card hidden" id="regFormCard">
       <h2>注册</h2>
       <div class="note" style="margin-bottom:8px;">创建新账号，一个账号通行全部应用。</div>
@@ -113,12 +116,12 @@
     </div>
   </div>
 
-  <!-- 已登录 -->
   <div id="adminPage" class="hidden">
     <div class="card">
       <div class="avatar">👤</div>
       <div class="email" id="adminEmail"></div>
       <div class="nickname" id="adminNick"></div>
+      <div class="note" id="currentNodeBadge" style="text-align:center;margin-top:4px;"></div>
     </div>
 
     <div class="card">
@@ -129,7 +132,7 @@
       <button class="btn btn-secondary" onclick="openApp('tanchi')">📝 TanchiNotes</button>
     </div>
 
-    <div class="card">
+    <div class="card" id="passkeyCard">
       <h2>🔑 通行密钥（Passkey）</h2>
       <div class="note" style="margin-bottom:10px;">用设备生物识别 / PIN / 安全钥匙免密登录，防钓鱼。需先在 Supabase 后台 Authentication → Passkeys 开启。</div>
       <div id="passkeyList" style="margin-bottom:10px;"></div>
@@ -143,7 +146,7 @@
 </div>
 
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
-<script src="sbauth.js?v=20261030"></script>
+<script src="sbauth.js?v=20261111"></script>
 <script>
 const Q = new URLSearchParams(location.search);
 const APP = Q.get("app") || "";
@@ -161,11 +164,20 @@ let turnRegToken = null;
 function onTurnLogin(token) { turnLoginToken = token; document.getElementById("loginBtn").disabled = false; }
 function onTurnReg(token) { turnRegToken = token; document.getElementById("regBtn").disabled = false; }
 
+const NODE_LABEL = IS_CN_NODE ? "🇨🇳 中国大陆服务器" : "🇺🇸 国际服务器";
+const NODE_FLAG  = IS_CN_NODE ? "🇨🇳" : "🇺🇸";
+
+if (IS_CN_NODE) {
+  document.getElementById("passkeyLoginBtn").style.display = "none";
+  document.getElementById("magicLinkRow").style.display = "none";
+  document.getElementById("passkeyCard").style.display = "none";
+}
+
 if (APP && APP_NAMES[APP]) {
   document.getElementById("pageTitle").textContent = "🔐 登录";
-  document.getElementById("pageSubtitle").textContent = "登录以继续使用" + APP_NAMES[APP];
+  document.getElementById("pageSubtitle").textContent = "登录以继续使用" + APP_NAMES[APP] + " · " + NODE_LABEL;
   document.getElementById("loginHint").textContent =
-    "登录以继续使用" + APP_NAMES[APP] + "，一个账号通行全部应用。";
+    "登录以继续使用" + APP_NAMES[APP] + "（" + NODE_LABEL + "），一个账号通行全部应用。";
 }
 
 function showMsg(id, text, ok) {
@@ -175,7 +187,6 @@ function showMsg(id, text, ok) {
   el.className = "msg " + (ok ? "msg ok" : "msg err");
 }
 
-// ---------- tab 切换 ----------
 function switchTab(which) {
   var isLogin = which === "login";
   document.getElementById("tabLogin").classList.toggle("active", isLogin);
@@ -184,20 +195,95 @@ function switchTab(which) {
   document.getElementById("regFormCard").classList.toggle("hidden", isLogin);
 }
 
+function _nodeFlag(n) { return n === "cn" ? "🇨🇳" : "🇺🇸"; }
+
+function renderAccountPicker() {
+  var arr = (typeof sbListUsers === "function") ? sbListUsers() : [];
+  var listEl = document.getElementById("accountList");
+  var hintEl = document.getElementById("pickerHint");
+  var titleEl = document.getElementById("pickerTitle");
+  if (!listEl) return;
+
+  var targetNode = IS_CN_NODE ? "cn" : "us";
+  var sameNode = arr.filter(r => r.node === targetNode);
+  var otherNode = arr.filter(r => r.node !== targetNode);
+
+  titleEl.textContent = "选择账号（" + NODE_LABEL + "）";
+  if (APP && APP_NAMES[APP]) {
+    hintEl.textContent = "正在登录" + APP_NAMES[APP] + "（" + NODE_LABEL + "）。选择已有账号继续，或添加新账号。";
+  } else {
+    hintEl.textContent = "选择一个账号继续，或使用其他账号登录。";
+  }
+
+  if (!arr.length) {
+    listEl.innerHTML = '<div class="note" style="text-align:center;padding:10px 0;">本地暂无已登录账号</div>';
+    return;
+  }
+
+  function row(r) {
+    var u = r.user || {};
+    var name = u.name || u.email || "用户";
+    var email = u.email || "";
+    var flag = _nodeFlag(r.node);
+    var sameNode2 = r.node === targetNode;
+    var opacity = sameNode2 ? "" : "opacity:0.6;";
+    return '<div style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:10px;margin-bottom:8px;background:rgba(255,255,255,0.05);cursor:pointer;' + opacity + '" onclick="pickAccount(\'' + email.replace(/'/g, "\\'") + '\')">'
+      + '<div style="font-size:24px;">' + flag + '</div>'
+      + '<div style="flex:1;min-width:0;">'
+      +   '<div style="font-size:14px;font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(name) + '</div>'
+      +   '<div style="font-size:12px;color:#a8a8d8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(email) + '</div>'
+      + '</div>'
+      + (!sameNode2 ? '<div style="font-size:11px;color:#ffb84d;">其他节点</div>' : '')
+      + '<button class="btn btn-danger" style="width:auto;margin:0;padding:4px 10px;font-size:12px;" onclick="event.stopPropagation();removeAccount(\'' + email.replace(/'/g, "\\'") + '\')">✕</button>'
+      + '</div>';
+  }
+
+  listEl.innerHTML = sameNode.map(row).join("") + (otherNode.length ? '<div class="note" style="margin:8px 0 4px;font-size:12px;">其他节点账号</div>' + otherNode.map(row).join("") : "");
+}
+
+function pickAccount(email) {
+  if (typeof sbSetActive === "function") sbSetActive(email);
+  var u = (typeof sbListUsers === "function") ? sbListUsers().find(r => r.user && r.user.email === email) : null;
+  if (u && u.user) afterLogin(u.user);
+}
+
+function removeAccount(email) {
+  if (!confirm("移除该账号？（仅移除本机缓存，不会注销服务端）")) return;
+  if (typeof sbRemoveUser === "function") sbRemoveUser(email);
+  renderAccountPicker();
+}
+
+function showLoginForm() {
+  document.getElementById("accountPickerCard").classList.add("hidden");
+  document.getElementById("authTabs").classList.remove("hidden");
+  document.getElementById("loginFormCard").classList.remove("hidden");
+}
+
 function showLogin() {
   document.getElementById("loginPage").classList.remove("hidden");
   document.getElementById("adminPage").classList.add("hidden");
+  var arr = (typeof sbListUsers === "function") ? sbListUsers() : [];
+  if (arr.length) {
+    document.getElementById("accountPickerCard").classList.remove("hidden");
+    document.getElementById("authTabs").classList.add("hidden");
+    document.getElementById("loginFormCard").classList.add("hidden");
+    document.getElementById("regFormCard").classList.add("hidden");
+    renderAccountPicker();
+  } else {
+    document.getElementById("accountPickerCard").classList.add("hidden");
+    document.getElementById("authTabs").classList.remove("hidden");
+  }
 }
 
 function showAdmin(user) {
   document.getElementById("loginPage").classList.add("hidden");
   document.getElementById("adminPage").classList.remove("hidden");
   document.getElementById("adminEmail").textContent = user.email || "";
-  document.getElementById("adminNick").textContent = user.name || user.email || "用户";
+  document.getElementById("adminNick").innerHTML = (user.name || user.email || "用户") + " " + NODE_FLAG;
+  document.getElementById("currentNodeBadge").textContent = NODE_LABEL;
   loadPasskeys();
 }
 
-// ---------- 通行密钥（Passkey / WebAuthn）----------
 function escHtml(s) {
   return String(s == null ? "" : s)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -281,7 +367,6 @@ async function loginWithPasskey() {
   }
 }
 
-// ---------- 登录 ----------
 async function doLogin() {
   var email = document.getElementById("loginEmail").value.trim();
   var pw = document.getElementById("loginPw").value;
@@ -302,7 +387,6 @@ async function doLogin() {
   }
 }
 
-// ---------- 注册 ----------
 async function doRegister() {
   var email = document.getElementById("regEmail").value.trim();
   var pw = document.getElementById("regPw").value;
@@ -322,7 +406,6 @@ async function doRegister() {
       options: { emailRedirectTo: redirectTo }
     });
     if (error) throw error;
-    // 开启邮箱确认时 data.session 为空，需用户点邮件链接验证
     if (!data.session) {
       showMsg("regMsg", "注册成功！请检查收件箱（含垃圾邮件），点击验证邮件完成后再登录。", true);
       document.getElementById("regPw").value = "";
@@ -330,7 +413,6 @@ async function doRegister() {
       btn.disabled = false; btn.textContent = "注册";
       return;
     }
-    // 未开启邮箱确认：直接进入
     var u = await sbRefreshUser();
     afterLogin(u);
   } catch (e) {
@@ -360,7 +442,6 @@ async function sendMagicLink() {
 }
 
 function afterLogin(u) {
-  // 优先跳回原页面（return 参数需是同站或已注册的应用域名，防止开放重定向）
   if (RETURN_URL) {
     try {
       var ru = new URL(RETURN_URL, location.origin);
@@ -383,7 +464,6 @@ async function doLogout() {
 
 (async function () {
   try {
-    // 先处理回调（魔法链接 / 邮箱验证回跳）
     var result = await msHandleRedirect();
     if (result) { afterLogin(result); return; }
     var user = sbGetUser();

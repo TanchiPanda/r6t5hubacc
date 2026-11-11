@@ -1,15 +1,52 @@
-// ===== Supabase 认证模块 =====
+// ===== Supabase 认证模块（R6T5 Hub 账号中心）=====
 // 登录走 Supabase Auth；业务数据（积分/会员）仍存 Cloudflare D1，user_id 用邮箱。
 // 兼容原 msauth.js 的函数名（msLogin/msGetUser/msLogout/msHandleRedirect/msTakeReturnTo）。
 
-var SB_URL = "https://fckqmlwkujixwztzqqni.supabase.co";
-var SB_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZja3FtbHdrdWppeHd6dHpxcW5pIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAzMjkzODksImV4cCI6MjEwNTkwNTM4OX0.W6FHJ-CgNNuCO9xEcrNuLj2y6-1D6Gyy72D0oGmA7Xw";
+// ---------- 节点判断：country=cn 走中国大陆服务器，否则走国际/CF 节点 ----------
+function _detectChinaNode() {
+    try {
+        var p = new URLSearchParams(location.search || "");
+        if (p.get("country") === "cn") {
+            try { sessionStorage.setItem("wordGameCountry", "cn"); } catch (e) {}
+            return true;
+        }
+        if (p.get("country") === "intl" || p.get("country") === "cf") {
+            try { sessionStorage.removeItem("wordGameCountry"); } catch (e) {}
+            return false;
+        }
+    } catch (e) {}
+    // 从 return URL 解析 country=cn（Word_Funny_Game 跳回时会带上）
+    try {
+        var p2 = new URLSearchParams(location.search || "");
+        var ret = p2.get("return") || "";
+        if (ret && /[?&]country=cn/.test(ret)) {
+            try { sessionStorage.setItem("wordGameCountry", "cn"); } catch (e) {}
+            return true;
+        }
+    } catch (e) {}
+    try {
+        if (sessionStorage.getItem("wordGameCountry") === "cn") return true;
+    } catch (e) {}
+    return false;
+}
 
-var SB_USER_KEY = "wordGameGitHubUser";
+var IS_CN_NODE = _detectChinaNode();
+
+var CN_SB_URL  = "https://bxanbosouqnezggwdqhs.supabase.co";
+var CN_SB_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ4YW5ib3NvdXFuZXpnZ3dkcWhzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQzNDg5NjAsImV4cCI6MjEwOTkyNDk2MH0.a29TONXcHs6lssvNw0KCAMVw6KkWsgysH5fiM3Pr0HM";
+
+var INTL_SB_URL  = "https://fckqmlwkujixwztzqqni.supabase.co";
+var INTL_SB_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZja3FtbHdrdWppeHd6dHpxcW5pIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAzMjkzODksImV4cCI6MjEwNTkwNTM4OX0.W6FHJ-CgNNuCO9xEcrNuLj2y6-1D6Gyy72D0oGmA7Xw";
+
+var SB_URL   = IS_CN_NODE ? CN_SB_URL : INTL_SB_URL;
+var SB_ANON  = IS_CN_NODE ? CN_SB_ANON : INTL_SB_ANON;
+
+var SB_USER_KEY    = "wordGameGitHubUser";
+var SB_USERS_KEY   = "wordGameUsersArr";
+var SB_ACTIVE_KEY  = "wordGameActiveEmail";
 var _sb = null;
 var _sbPromise = null;
 
-// ---------- 懒加载 Supabase JS ----------
 function _injectSupabase() {
     if (_sbPromise) return _sbPromise;
     _sbPromise = new Promise(function (resolve, reject) {
@@ -34,7 +71,6 @@ function _injectSupabase() {
     return _sbPromise;
 }
 
-// ---------- 初始化 client ----------
 async function sbInit() {
     if (_sb) return _sb;
     await _injectSupabase();
@@ -43,13 +79,12 @@ async function sbInit() {
             persistSession: true,
             autoRefreshToken: true,
             detectSessionInUrl: false,
-            experimental: { passkey: true } // 通行密钥（WebAuthn，实验性 Beta）
+            experimental: { passkey: !IS_CN_NODE }
         }
     });
     return _sb;
 }
 
-// ---------- 用户对象映射 ----------
 function _mapUser(sbUser) {
     if (!sbUser) return null;
     var email = sbUser.email || (sbUser.user_metadata && sbUser.user_metadata.email) || "";
@@ -63,13 +98,39 @@ function _mapUser(sbUser) {
     };
 }
 
+function _readUsersArr() {
+    try {
+        var arr = JSON.parse(localStorage.getItem(SB_USERS_KEY) || "[]");
+        if (Array.isArray(arr)) return arr;
+    } catch (e) {}
+    return [];
+}
+function _writeUsersArr(arr) {
+    try { localStorage.setItem(SB_USERS_KEY, JSON.stringify(arr)); } catch (e) {}
+}
+function _upsertUser(u) {
+    if (!u || !u.email) return u;
+    var arr = _readUsersArr();
+    var idx = -1;
+    for (var i = 0; i < arr.length; i++) {
+        if (arr[i].user && arr[i].user.email === u.email) { idx = i; break; }
+    }
+    var rec = { user: u, node: IS_CN_NODE ? "cn" : "us", savedAt: Date.now() };
+    if (idx >= 0) arr[idx] = rec;
+    else arr.push(rec);
+    _writeUsersArr(arr);
+    try { localStorage.setItem(SB_ACTIVE_KEY, u.email); } catch (e) {}
+    return u;
+}
+
 function _saveAuth(u) {
+    if (!u) return u;
     try { localStorage.setItem(SB_USER_KEY, JSON.stringify(u)); } catch (e) {}
+    _upsertUser(u);
     _writeHubCookie("ms_user", JSON.stringify(u), 7);
     return u;
 }
 
-// ---------- 读取本地用户 ----------
 function sbGetUser() {
     try {
         var u = JSON.parse(localStorage.getItem(SB_USER_KEY) || "null");
@@ -78,6 +139,39 @@ function sbGetUser() {
     var c = _readHubCookie("ms_user");
     if (c) { try { return JSON.parse(c); } catch (e) {} }
     return null;
+}
+
+function sbListUsers(nodeFilter) {
+    var arr = _readUsersArr();
+    if (nodeFilter) return arr.filter(function (r) { return r.node === nodeFilter; });
+    return arr;
+}
+
+function sbSetActive(email) {
+    var arr = _readUsersArr();
+    for (var i = 0; i < arr.length; i++) {
+        if (arr[i].user && arr[i].user.email === email) {
+            try {
+                localStorage.setItem(SB_USER_KEY, JSON.stringify(arr[i].user));
+                localStorage.setItem(SB_ACTIVE_KEY, email);
+            } catch (e) {}
+            return arr[i].user;
+        }
+    }
+    return null;
+}
+
+function sbRemoveUser(email) {
+    var arr = _readUsersArr().filter(function (r) {
+        return !(r.user && r.user.email === email);
+    });
+    _writeUsersArr(arr);
+    try {
+        if (localStorage.getItem(SB_ACTIVE_KEY) === email) {
+            localStorage.removeItem(SB_ACTIVE_KEY);
+            localStorage.removeItem(SB_USER_KEY);
+        }
+    } catch (e) {}
 }
 
 async function sbRefreshUser() {
@@ -89,7 +183,6 @@ async function sbRefreshUser() {
     return null;
 }
 
-// ---------- 跨子域 cookie ----------
 function _hubCookieDomain() {
     var h = location.hostname;
     var i = h.indexOf(".");
@@ -113,13 +206,12 @@ function _clearHubCookie(name) {
     } catch (e) {}
 }
 
-// ---------- 登录跳转（去登录页）----------
 function msLogin(options) {
     var opt = options || {};
     if (opt.returnTo) {
         try { localStorage.setItem("msReturnTo", opt.returnTo); } catch (e) {}
     }
-    location.href = "/login.html";
+    location.href = "/?country=" + (IS_CN_NODE ? "cn" : "intl");
 }
 
 function msTakeReturnTo(def) {
