@@ -299,10 +299,42 @@ function renderAccountPicker() {
   listEl.innerHTML = sameNode.map(row).join("") + (otherNode.length ? '<div class="note" style="margin:8px 0 4px;font-size:12px;">其他节点账号</div>' + otherNode.map(row).join("") : "");
 }
 
+function _savePwdForEmail(email, pwd) {
+  if (!email || !pwd) return;
+  try {
+    var arr = JSON.parse(localStorage.getItem("wordGameUsersArr") || "[]");
+    var enc = btoa(unescape(encodeURIComponent(pwd)));
+    for (var i = 0; i < arr.length; i++) {
+      if (arr[i].user && arr[i].user.email === email) { arr[i].pwd = enc; break; }
+    }
+    localStorage.setItem("wordGameUsersArr", JSON.stringify(arr));
+  } catch (e) {}
+}
+
 function pickAccount(email) {
   if (typeof sbSetActive === "function") sbSetActive(email);
   var u = (typeof sbListUsers === "function") ? sbListUsers().find(r => r.user && r.user.email === email) : null;
-  if (u && u.user) _prompt2FAIfNeeded(u.user, () => afterLogin(u.user));
+  if (!u || !u.user) return;
+  // 该账号是否缓存了密码：是就自动用密码登录恢复 Supabase session
+  var pwd = u.pwd ? decodeURIComponent(escape(atob(u.pwd))) : "";
+  if (pwd) {
+    (async () => {
+      try {
+        var client = await sbInit();
+        var { data, error } = await client.auth.signInWithPassword({ email: email, password: pwd });
+        if (error) throw error;
+        _prompt2FAIfNeeded(data.user || u.user, () => afterLogin(u.user));
+      } catch (e) {
+        alert("登录该账号失败：" + ((e && e.message) || e) + "，请手动输入密码");
+        showLoginForm();
+        document.getElementById("loginEmail").value = email;
+      }
+    })();
+  } else {
+    // 没存密码：直接走本地登录页让用户输
+    showLoginForm();
+    document.getElementById("loginEmail").value = email;
+  }
 }
 
 function removeAccount(email) {
@@ -442,7 +474,10 @@ async function doLogin() {
     // "invalid claim: missing sub claim"。这里直接用 data.user，等 MFA verify 升级 session 后再刷新。
     var u = data.user;
     _prompt2FAIfNeeded(u, () => {
-      sbRefreshUser().catch(function(){}).then(function(){ afterLogin(u); });
+      sbRefreshUser().catch(function(){}).then(function(){
+        _savePwdForEmail(u && u.email, pw);
+        afterLogin(u);
+      });
     });
   } catch (e) {
     showMsg("loginMsg", (e && e.message) || "登录失败，邮箱或密码错误", false);
@@ -673,6 +708,7 @@ async function switchAccount() {
   try {
     document.cookie = "ms_user=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=.r6t5.dpdns.org;Secure";
   } catch (e) {}
+  // 不跳转刷新，直接切回登录页；缓存账号列表仍在，会自动弹出选择器
   showLogin();
 }
 
@@ -685,8 +721,33 @@ async function doLogout() {
     var result = await msHandleRedirect();
     if (result) { afterLogin(result); return; }
     var user = sbGetUser();
-    if (user) { afterLogin(user); }
-    else { showLogin(); }
+    if (!user) { showLogin(); return; }
+    // 检查 Supabase client 是否还有 session；没有就用缓存密码自动重登，避免 "Auth session missing"
+    try {
+      var client = await sbInit();
+      var sess = await client.auth.getSession();
+      if (sess && sess.data && sess.data.session) {
+        afterLogin(user); return;
+      }
+    } catch (e) {}
+    // 没 session，找该账号的缓存密码自动重登
+    var arr = (typeof sbListUsers === "function") ? sbListUsers() : [];
+    var rec = arr.find(r => r.user && r.user.email === user.email);
+    var pwd = rec && rec.pwd ? decodeURIComponent(escape(atob(rec.pwd))) : "";
+    if (!pwd) {
+      // 没存密码，不能静默恢复，回到登录选择页让用户输
+      showLogin(); return;
+    }
+    try {
+      var client2 = await sbInit();
+      var { data, error } = await client2.auth.signInWithPassword({ email: user.email, password: pwd });
+      if (error) throw error;
+      var u2 = data.user;
+      _prompt2FAIfNeeded(u2, () => afterLogin(u2 || user));
+    } catch (e) {
+      // 密码可能已改，清掉本地缓存走登录页
+      showLogin();
+    }
   } catch (e) {
     showLogin();
   }
