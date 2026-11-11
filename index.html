@@ -102,6 +102,7 @@
       <div class="note" id="pickerHint" style="margin-bottom:10px;"></div>
       <div id="accountList"></div>
       <button class="btn btn-secondary" id="addAccountBtn" onclick="showLoginForm()">+ 登录 / 添加另一个账号</button>
+      <div style="text-align:center;margin-top:10px;font-size:12px;color:#8888bb;">📖 <a href="https://my.feishu.cn/wiki/U9Azw3ougiAYb4k99GkcyGxon6g" target="_blank" rel="noopener" style="color:#4ecdc4;text-decoration:none;">登录帮助</a></div>
     </div>
 
     <div class="tabs" id="authTabs">
@@ -120,6 +121,7 @@
       <button class="btn btn-primary" id="loginBtn" onclick="doLogin()" disabled>登录</button>
       <button class="btn btn-secondary" id="passkeyLoginBtn" onclick="loginWithPasskey()">🔑 使用通行密钥登录</button>
       <div class="links" id="magicLinkRow"><a onclick="sendMagicLink()">发送魔法链接（免密码登录）</a></div>
+      <div style="text-align:center;margin-top:10px;font-size:12px;color:#8888bb;">📖 <a href="https://my.feishu.cn/wiki/U9Azw3ougiAYb4k99GkcyGxon6g" target="_blank" rel="noopener" style="color:#4ecdc4;text-decoration:none;">登录遇到问题？看登录帮助</a></div>
       <div class="msg" id="loginMsg"></div>
     </div>
 
@@ -161,6 +163,7 @@
       <div class="msg" id="passkeyMsg"></div>
     </div>
 
+    <button class="btn btn-secondary" onclick="window.open('https://my.feishu.cn/wiki/U9Azw3ougiAYb4k99GkcyGxon6g','_blank','noopener')">📖 登录帮助</button>
     <button class="btn btn-secondary" onclick="switchAccount()">🔄 切换账号</button>
     <button class="btn btn-danger" onclick="doLogout()">退出登录</button>
     <div class="msg" id="adminMsg"></div>
@@ -497,7 +500,6 @@ function openApp(id) {
   if (APP_URLS[id]) location.href = APP_URLS[id];
 }
 
-// 切换账号：退出当前 Supabase session，但保留本机缓存账号列表
 async function switchAccount() {
   try {
     var client = await sbInit();
@@ -508,7 +510,6 @@ async function switchAccount() {
   try {
     document.cookie = "ms_user=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=.r6t5.dpdns.org;Secure";
   } catch (e) {}
-  // 不跳转刷新，直接切回登录页；缓存账号列表仍在，会自动弹出选择器
   showLogin();
 }
 
