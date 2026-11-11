@@ -161,6 +161,7 @@
       <div class="msg" id="passkeyMsg"></div>
     </div>
 
+    <button class="btn btn-secondary" onclick="switchAccount()">🔄 切换账号</button>
     <button class="btn btn-danger" onclick="doLogout()">退出登录</button>
     <div class="msg" id="adminMsg"></div>
   </div>
@@ -494,6 +495,21 @@ function afterLogin(u) {
 
 function openApp(id) {
   if (APP_URLS[id]) location.href = APP_URLS[id];
+}
+
+// 切换账号：退出当前 Supabase session，但保留本机缓存账号列表
+async function switchAccount() {
+  try {
+    var client = await sbInit();
+    await client.auth.signOut();
+  } catch (e) {}
+  try { localStorage.removeItem("wordGameGitHubUser"); } catch (e) {}
+  try { localStorage.removeItem("wordGameActiveEmail"); } catch (e) {}
+  try {
+    document.cookie = "ms_user=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=.r6t5.dpdns.org;Secure";
+  } catch (e) {}
+  // 不跳转刷新，直接切回登录页；缓存账号列表仍在，会自动弹出选择器
+  showLogin();
 }
 
 async function doLogout() {
