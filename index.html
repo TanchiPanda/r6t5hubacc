@@ -543,12 +543,24 @@ async function sendMagicLink() {
   }
 }
 
-function afterLogin(u) {
+async function afterLogin(u) {
   if (RETURN_URL) {
     try {
       var ru = new URL(RETURN_URL, location.origin);
       if (ru.protocol === "https:" && ru.hostname.endsWith(".r6t5.dpdns.org")) {
-        location.href = ru.href; return;
+        // 把 Supabase 会话带给应用：应用侧用 sbResolveAuth 消费 hash 后即可拿到 JWT
+        var hash = "";
+        try {
+          var client = await sbInit();
+          var sess = await client.auth.getSession();
+          var s = sess && sess.data && sess.data.session;
+          if (s && s.access_token) {
+            hash = "#access_token=" + encodeURIComponent(s.access_token)
+              + "&refresh_token=" + encodeURIComponent(s.refresh_token || "")
+              + "&token_type=bearer";
+          }
+        } catch (e) {}
+        location.href = ru.href + hash; return;
       }
     } catch (e) {}
   }
