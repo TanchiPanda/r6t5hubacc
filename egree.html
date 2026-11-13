@@ -131,7 +131,9 @@
 
 <script src="sbauth.js?v=20261113"></script>
 <script>
-// 额度查询走《单词闯关》的 Pages Function（同账号、同 Supabase 项目）
+// 额度查询：优先走本域 /api/quota 代理（同源，不会被跨域/网络拦截）；
+// 代理不可用时再直连《单词闯关》接口。
+const QUOTA_PROXY = "/api/quota";
 const VISION_API = "https://wordgm.r6t5.dpdns.org/api/vision";
 
 const Q = new URLSearchParams(location.search);
@@ -175,13 +177,38 @@ async function loadQuota(force) {
 
   usedEl.textContent = "读取中…";
   try {
-    const resp = await fetch(VISION_API, {
+    const payload = JSON.stringify({ quotaOnly: true });
+    const opts = {
       method: "POST",
       headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
-      body: JSON.stringify({ quotaOnly: true })
-    });
-    const d = await resp.json();
-    if (!resp.ok || !d.ok) throw new Error(d.error || ("HTTP " + resp.status));
+      body: payload
+    };
+
+    let d = null;
+    let lastErr = null;
+    for (const url of [QUOTA_PROXY, VISION_API]) {
+      try {
+        d = await fetchJson(url, opts);
+        break;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    if (!d) throw lastErr || new Error("无法连接额度服务");
+
+    // 凭证过期时刷新一次再重试
+    if (!d.ok && /(未登录|登录已过期|401)/.test(String(d.error || ""))) {
+      try {
+        var fresh = (typeof sbGetAccessToken === "function") ? await sbGetAccessToken() : null;
+        if (fresh && fresh !== token) {
+          token = fresh;
+          opts.headers.Authorization = "Bearer " + fresh;
+          d = await fetchJson(QUOTA_PROXY, opts);
+        }
+      } catch (e) {}
+    }
+
+    if (!d.ok) throw new Error(d.error || "额度服务返回异常");
 
     const q = d.quota || {};
     const used = q.used || 0;
@@ -203,7 +230,26 @@ async function loadQuota(force) {
   } catch (e) {
     usedEl.textContent = "–";
     barEl.style.width = "0%";
-    metaEl.textContent = "读取失败：" + ((e && e.message) || e);
+    const msgText = (e && e.message) || String(e);
+    metaEl.innerHTML = "读取失败：" + msgText +
+      "<br>可先回首页刷新一次，或稍后重试；若一直失败，可能是《单词闯关》尚未绑定 AI / VISION_QUOTA 或正在部署。";
+  }
+}
+
+// 带超时的 JSON 请求，避免请求悬挂或拿到 HTML 报错页直接崩
+async function fetchJson(url, opts) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 10000);
+  try {
+    const resp = await fetch(url, Object.assign({}, opts, { signal: ctrl.signal }));
+    const text = await resp.text();
+    let data;
+    try { data = JSON.parse(text); }
+    catch (e) { throw new Error("服务返回了非预期内容（HTTP " + resp.status + "）"); }
+    if (!resp.ok && !data.error) throw new Error("HTTP " + resp.status);
+    return data;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
