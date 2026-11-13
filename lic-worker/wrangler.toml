@@ -17,7 +17,7 @@ STAR_REPO = "TanchiPanda/r6t5-docs-community"
 # 产品编码 -> 显示名
 PRODUCTS = '{"docs-pro":{"label":"r6t5-docs pro","seats":1}}'
 # 管理员邮箱（逗号分隔），用于人工审核
-ADMIN_EMAILS = "REPLACE_WITH_YOUR_EMAIL"
+ADMIN_EMAILS = "r6t5storage@outlook.com"
 # GitHub OAuth 回调前缀（部署后的 Worker 域名）
 PUBLIC_BASE = "https://lic.r6t5.dpdns.org"
 # 领取成功后跳回的页面

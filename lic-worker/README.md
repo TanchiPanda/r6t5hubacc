@@ -35,7 +35,7 @@ wrangler secret put SUPABASE_INTL_ANON
 
 ### wrangler.toml 里要改的 vars
 
-`ALLOWED_ORIGINS`、`STAR_REPO`（默认 `TanchiPanda/r6t5-docs-community`）、`ADMIN_EMAILS`、`PUBLIC_BASE`、`HUB_RETURN`。
+`ADMIN_EMAILS`（当前 `r6t5storage@outlook.com`）、`ALLOWED_ORIGINS`、`STAR_REPO`（默认 `TanchiPanda/r6t5-docs-community`）、`ADMIN_EMAILS`、`PUBLIC_BASE`、`HUB_RETURN`。
 
 ```bash
 wrangler deploy
