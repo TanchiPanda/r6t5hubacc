@@ -153,6 +153,7 @@
       <button class="btn btn-secondary" onclick="openApp('wallet')">💰 积分钱包</button>
       <button class="btn btn-secondary" onclick="openApp('wrobook')">📕 错题本</button>
       <button class="btn btn-secondary" onclick="openApp('tanchi')">📝 TanchiNotes</button>
+      <button class="btn btn-secondary" onclick="openApp('open-platform')">🧩 R6T5 开放平台</button>
       <button class="btn btn-secondary" onclick="location.href='egree.html'">📊 额度状态</button>
     </div>
 
@@ -192,12 +193,14 @@
 const Q = new URLSearchParams(location.search);
 const APP = Q.get("app") || "";
 const RETURN_URL = Q.get("return") || "";
-const APP_NAMES = { wordgm: "《单词闯关》", wallet: "积分钱包", wrobook: "《错题本》", tanchi: "《TanchiNotes》" };
+const APP_NAMES = { wordgm: "《单词闯关》", wallet: "积分钱包", wrobook: "《错题本》", tanchi: "《TanchiNotes》", "open-platform": "R6T5 开放平台" };
 const APP_URLS = {
   wordgm: "https://wordgm.r6t5.dpdns.org",
   wallet: "https://wallet.r6t5.dpdns.org",
   wrobook: "https://wrobook.r6t5.dpdns.org",
-  tanchi: "https://tanchi.r6t5.dpdns.org"
+  tanchi: "https://tanchi.r6t5.dpdns.org",
+  // 开放平台站点地址待定：填好这里即可自动出现入口跳转
+  "open-platform": ""
 };
 
 let turnLoginToken = null;
@@ -555,7 +558,9 @@ function afterLogin(u) {
 }
 
 function openApp(id) {
-  if (APP_URLS[id]) location.href = APP_URLS[id];
+  if (APP_URLS[id]) { location.href = APP_URLS[id]; return; }
+  var tip = document.getElementById("adminMsg");
+  if (tip) tip.textContent = "「" + (APP_NAMES[id] || id) + "」站点还没接入，app 标识已登记为 " + id;
 }
 
 // ---------- Supabase MFA（服务端 TOTP 二步验证，仅国际节点） ----------
