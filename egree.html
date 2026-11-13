@@ -133,7 +133,7 @@
 <script>
 // 额度查询：优先走本域 /api/quota 代理（同源，不会被跨域/网络拦截）；
 // 代理不可用时再直连《单词闯关》接口。
-const QUOTA_PROXY = "/api/quota";
+const QUOTA_PROXY = "/api/quota"; // 待额度 Worker 上线后再启用
 const VISION_API = "https://wordgm.r6t5.dpdns.org/api/vision";
 
 const Q = new URLSearchParams(location.search);
@@ -186,7 +186,7 @@ async function loadQuota(force) {
 
     let d = null;
     let lastErr = null;
-    for (const url of [QUOTA_PROXY, VISION_API]) {
+    for (const url of [VISION_API, QUOTA_PROXY]) {
       try {
         d = await fetchJson(url, opts);
         break;
