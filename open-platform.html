@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>R6T5 开放平台</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    min-height: 100vh; background: #14121a; color: #e9e7f2;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
+    display: flex; flex-direction: column; align-items: center; padding: 40px 16px 60px;
+  }
+  a { color: #9d9bd6; text-decoration: none; }
+  a:hover { color: #c9c7f5; }
+  .wrap { width: 100%; max-width: 720px; }
+  .head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+  .brand { display: flex; align-items: baseline; gap: 10px; }
+  h1 { font-size: 22px; font-weight: 600; letter-spacing: .5px; }
+  .sub { font-size: 12px; color: #8b88a8; margin-top: 6px; line-height: 1.7; }
+  .user { font-size: 12px; color: #8b88a8; white-space: nowrap; }
+  .user b { color: #cfcdf0; font-weight: 500; }
+
+  .card {
+    margin-top: 22px; background: #1d1a26; border: 1px solid #2e2a3d;
+    border-radius: 14px; padding: 18px;
+  }
+  .label { font-size: 11px; color: #8b88a8; letter-spacing: .5px; margin-bottom: 8px; }
+  .row { display: flex; gap: 10px; }
+  .row input {
+    flex: 1; min-width: 0; padding: 12px 14px; font-size: 14px; border-radius: 10px;
+    border: 1px solid #35314a; background: #171420; color: #e9e7f2; outline: none;
+    font-family: inherit;
+  }
+  .row input:focus { border-color: #6b67a8; }
+  button {
+    border: none; border-radius: 10px; padding: 12px 18px; font-size: 14px; cursor: pointer;
+    background: #6b67a8; color: #fff; font-family: inherit; transition: .15s;
+  }
+  button:hover { background: #7c78bd; }
+  button.ghost { background: transparent; border: 1px solid #35314a; color: #b9b7d6; padding: 9px 12px; font-size: 12px; }
+  button.ghost:hover { background: #262232; }
+
+  .status { margin-top: 12px; font-size: 12px; color: #8b88a8; min-height: 18px; }
+  .status.err { color: #ff9a9a; }
+  .status.ok { color: #8fd6a8; }
+
+  .blocked {
+    display: none; margin-top: 14px; border-radius: 12px; padding: 14px;
+    background: #2b1720; border: 1px solid #57273c; color: #ffb3b3; font-size: 13px; line-height: 1.8;
+  }
+  .blocked.show { display: block; }
+  .blocked h3 { font-size: 14px; margin-bottom: 6px; color: #ff8f8f; font-weight: 600; }
+
+  .quick { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+  .quick a {
+    display: inline-block; padding: 8px 12px; border-radius: 999px; font-size: 12px;
+    border: 1px solid #35314a; color: #d6d4f0; background: #1b1824;
+  }
+  .quick a:hover { background: #262232; color: #fff; }
+
+  .recent { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+  .recent-item { display: flex; align-items: center; gap: 10px; font-size: 12.5px; padding: 7px 4px; border-bottom: 1px dashed #2a2637; }
+  .recent-item span.host { color: #d6d4f0; flex: 0 0 auto; }
+  .recent-item span.path { color: #6f6c8a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+  .recent-item button { background: none; border: none; color: #6f6c8a; font-size: 11px; cursor: pointer; padding: 2px 4px; }
+  .recent-empty { font-size: 12px; color: #6f6c8a; padding: 4px; }
+
+  .foot { margin-top: 26px; font-size: 11px; color: #6f6c8a; line-height: 1.9; }
+  .foot .warn { color: #8b88a8; }
+  @media (max-width: 560px) {
+    .row { flex-direction: column; }
+    button { width: 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <div class="brand"><h1>R6T5 开放平台</h1></div>
+    <div class="user" id="userBox">…</div>
+  </div>
+  <div class="sub">
+    输入任意网址即可跳转。仅有黑名单中的站点会被拦截，其余一律放行。
+  </div>
+
+  <div class="card">
+    <div class="label">打开站点</div>
+    <div class="row">
+      <input id="urlInput" type="text" placeholder="example.com 或 https://example.com/page" autocomplete="off" spellcheck="false" />
+      <button id="openBtn">打开</button>
+    </div>
+    <div class="status" id="status"></div>
+    <div class="blocked" id="blockedBox">
+      <h3>该站点在黑名单中</h3>
+      <div id="blockedMsg"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="label">常用入口</div>
+    <div class="quick" id="quick"></div>
+  </div>
+
+  <div class="card">
+    <div class="label" style="display:flex;justify-content:space-between;align-items:center;">
+      <span>最近打开</span>
+      <button class="ghost" id="clearRecent">清空</button>
+    </div>
+    <div class="recent" id="recent"></div>
+  </div>
+
+  <div class="foot">
+    黑名单来源：本仓库的 <a href="blacklist.json" target="_blank" rel="noopener">blacklist.json</a>（GitHub 维护，目前为空）。<br />
+    <span class="warn">说明：黑名单由前端拉取并提示，属于使用约定，不是强制拦截；跳转后的站点内容与本平台无关。</span>
+  </div>
+</div>
+
+<script src="sbauth.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  const BLACKLIST_URL = "./blacklist.json";
+  const RAW_FALLBACK = "https://raw.githubusercontent.com/TanchiPanda/r6t5hubacc/main/blacklist.json";
+  const CACHE_KEY = "openPlatformBlacklist";
+  const CACHE_TTL = 5 * 60 * 1000;
+  const RECENT_KEY = "openPlatformRecent";
+
+  const QUICK = [
+    ["⚡ 单词闯关", "https://wordgm.r6t5.dpdns.org"],
+    ["📕 错题本", "https://wrobook.r6t5.dpdns.org"],
+    ["📝 TanchiNotes", "https://tanchi.r6t5.dpdns.org"],
+    ["🏠 账号中心", "https://myacc.r6t5.dpdns.org"],
+    ["📖 R6T5 文档", "https://tanchipanda.github.io/r6t5-docs/"],
+  ];
+
+  const $ = (id) => document.getElementById(id);
+  const statusEl = $("status");
+  const blockedBox = $("blockedBox");
+  const blockedMsg = $("blockedMsg");
+
+  function setStatus(text, cls) {
+    statusEl.textContent = text || "";
+    statusEl.className = "status" + (cls ? " " + cls : "");
+  }
+
+  /* ---------- 黑名单加载 ---------- */
+  let blacklist = [];
+  let blacklistState = "loading";
+
+  function normalizeEntries(data) {
+    const arr = (data && (data.entries || data.blacklist)) || [];
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .map((e) => {
+        if (typeof e === "string") return { host: e.toLowerCase().replace(/^\*\./, ""), mode: e.startsWith("*.") ? "suffix" : "exact", reason: "" };
+        if (e && e.host) {
+          return {
+            host: String(e.host).toLowerCase().replace(/^\*\./, "").replace(/^https?:\/\//, "").replace(/\/.*$/, ""),
+            mode: e.mode === "exact" ? "exact" : "suffix",
+            reason: String(e.reason || ""),
+          };
+        }
+        return null;
+      })
+      .filter((e) => e && e.host);
+  }
+
+  async function loadBlacklist(force) {
+    try {
+      const cached = sessionStorage.getItem(CACHE_KEY);
+      if (!force && cached) {
+        const c = JSON.parse(cached);
+        if (Date.now() - c.t < CACHE_TTL) {
+          blacklist = c.list;
+          blacklistState = "ok";
+          return;
+        }
+      }
+    } catch (e) {}
+
+    let data = null;
+    try {
+      const r = await fetch(BLACKLIST_URL + "?t=" + (force ? Date.now() : ""), { cache: force ? "no-store" : "default" });
+      if (r.ok) data = await r.json();
+    } catch (e) {}
+    if (!data) {
+      try {
+        const r2 = await fetch(RAW_FALLBACK + "?t=" + Date.now(), { cache: "no-store" });
+        if (r2.ok) data = await r2.json();
+      } catch (e) {}
+    }
+
+    if (!data) {
+      blacklist = [];
+      blacklistState = "fail";
+      return;
+    }
+    blacklist = normalizeEntries(data);
+    blacklistState = "ok";
+    try {
+      sessionStorage.setItem(CACHE_KEY, JSON.stringify({ t: Date.now(), list: blacklist }));
+    } catch (e) {}
+  }
+
+  function matchBlacklist(host) {
+    const h = host.toLowerCase();
+    for (const e of blacklist) {
+      if (e.mode === "exact") {
+        if (h === e.host) return e;
+      } else {
+        if (h === e.host || h.endsWith("." + e.host)) return e;
+      }
+    }
+    return null;
+  }
+
+  /* ---------- URL 解析 ---------- */
+  function parseTarget(raw) {
+    let s = String(raw || "").trim();
+    if (!s) return { error: "请输入要打开的网址" };
+    if (/^(javascript|data|vbscript|file|blob):/i.test(s)) {
+      return { error: "不支持 " + s.split(":")[0] + ": 开头的地址" };
+    }
+    if (!/^https?:\/\//i.test(s)) {
+      if (/^[\w-]+(\.[\w-]+)+([/?#].*)?$/.test(s) || /^localhost(:\d+)?(\/.*)?$/i.test(s)) {
+        s = "https://" + s;
+      } else {
+        return { error: "无法识别的地址，示例：example.com 或 https://example.com" };
+      }
+    }
+    let u;
+    try { u = new URL(s); } catch (e) { return { error: "网址格式不正确" }; }
+    if (!/^https?:$/.test(u.protocol)) return { error: "只支持 http / https" };
+    return { url: u };
+  }
+
+  /* ---------- 最近记录 ---------- */
+  function readRecent() {
+    try { return JSON.parse(localStorage.getItem(RECENT_KEY) || "[]"); } catch (e) { return []; }
+  }
+  function writeRecent(list) {
+    try { localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(0, 8))); } catch (e) {}
+  }
+  function addRecent(u) {
+    const list = readRecent().filter((x) => x.host + x.path !== u.hostname + (u.pathname + u.search));
+    list.unshift({ host: u.hostname, path: u.pathname + u.search, url: u.href, t: Date.now() });
+    writeRecent(list);
+    renderRecent();
+  }
+  function renderRecent() {
+    const box = $("recent");
+    const list = readRecent();
+    box.innerHTML = "";
+    if (!list.length) {
+      box.innerHTML = '<div class="recent-empty">还没有打开过站点</div>';
+      return;
+    }
+    list.forEach((it) => {
+      const row = document.createElement("div");
+      row.className = "recent-item";
+      const a = document.createElement("a");
+      a.href = it.url;
+      a.style.flex = "0 0 auto";
+      a.innerHTML = '<span class="host"></span>';
+      a.firstChild.textContent = it.host;
+      a.addEventListener("click", (ev) => { ev.preventDefault(); go(it.url); });
+      const p = document.createElement("span");
+      p.className = "path";
+      p.textContent = it.path || "/";
+      const del = document.createElement("button");
+      del.textContent = "移除";
+      del.onclick = () => {
+        writeRecent(readRecent().filter((x) => x.url !== it.url));
+        renderRecent();
+      };
+      row.appendChild(a); row.appendChild(p); row.appendChild(del);
+      box.appendChild(row);
+    });
+  }
+
+  /* ---------- 跳转 ---------- */
+  function go(href, newTab) {
+    const target = new URL(href, location.href);
+    blockedBox.classList.remove("show");
+    const hit = matchBlacklist(target.hostname);
+    if (hit) {
+      blockedMsg.textContent =
+        "域名 " + target.hostname + " 已被列入黑名单。" + (hit.reason ? "\n原因：" + hit.reason : "");
+      blockedMsg.style.whiteSpace = "pre-wrap";
+      blockedBox.classList.add("show");
+      setStatus("已拦截，未跳转", "err");
+      return false;
+    }
+    addRecent(target);
+    setStatus("正在打开 " + target.hostname + " …", "ok");
+    if (newTab) window.open(target.href, "_blank", "noopener");
+    else location.href = target.href;
+    return true;
+  }
+
+  function handleOpen() {
+    const parsed = parseTarget($("urlInput").value);
+    if (parsed.error) { setStatus(parsed.error, "err"); return; }
+    const ok = go(parsed.url.href);
+    if (!ok) return;
+  }
+
+  $("openBtn").onclick = handleOpen;
+  $("urlInput").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); handleOpen(); }
+  });
+  $("clearRecent").onclick = () => { writeRecent([]); renderRecent(); };
+
+  /* ---------- 快捷入口 ---------- */
+  (function renderQuick() {
+    const box = $("quick");
+    QUICK.forEach(([label, url]) => {
+      const a = document.createElement("a");
+      a.href = url;
+      a.textContent = label;
+      a.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        go(url);
+      });
+      box.appendChild(a);
+    });
+  })();
+
+  /* ---------- 登录态 ---------- */
+  async function renderUser() {
+    const box = $("userBox");
+    let u = null;
+    try { if (typeof sbGetUser === "function") u = sbGetUser(); } catch (e) {}
+    if (u && (u.email || u.name)) {
+      box.innerHTML = '已登录 <b></b>';
+      box.querySelector("b").textContent = u.email || u.name;
+      return;
+    }
+    const a = document.createElement("a");
+    a.href = "https://myacc.r6t5.dpdns.org/?app=open-platform&return=" + encodeURIComponent(location.href);
+    a.textContent = "登录账号 →";
+    box.innerHTML = "";
+    box.appendChild(a);
+  }
+
+  /* ---------- 初始化 ---------- */
+  (async function boot() {
+    await loadBlacklist(false);
+    if (blacklistState === "ok") {
+      setStatus(
+        blacklist.length
+          ? "已加载黑名单（" + blacklist.length + " 条）"
+          : "黑名单为空 —— 所有站点均可打开",
+        ""
+      );
+    } else {
+      setStatus("黑名单加载失败，按空名单处理", "err");
+    }
+    renderRecent();
+    renderUser();
+  })();
+})();
+</script>
+</body>
+</html>
