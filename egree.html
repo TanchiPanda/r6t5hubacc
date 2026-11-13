@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>额度状态 · R6T5 Hub</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; font-family:"Microsoft Yahei","PingFang SC",-apple-system,sans-serif; }
+  body {
+    min-height:100vh;
+    background:linear-gradient(135deg,#1a1a2e,#16213e,#0f3460);
+    color:#fff;
+    display:flex; align-items:flex-start; justify-content:center;
+    padding:40px 16px;
+  }
+  .container { width:100%; max-width:480px; }
+  .header { text-align:center; margin-bottom:24px; }
+  .header h1 { font-size:24px; color:#ffd700; letter-spacing:2px; }
+  .header p { font-size:13px; color:#a8a8d8; margin-top:6px; }
+  .card {
+    background:rgba(255,255,255,0.06);
+    border:1px solid rgba(255,255,255,0.1);
+    border-radius:16px; padding:22px; margin-bottom:16px;
+    backdrop-filter:blur(10px);
+  }
+  .card h2 { font-size:16px; color:#ffd700; margin-bottom:6px; }
+  .card .desc { font-size:12px; color:#a8a8d8; line-height:1.7; margin-bottom:16px; }
+  .row { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px; }
+  .row .label { font-size:14px; color:#c8c8e8; }
+  .row .value { font-size:22px; font-weight:bold; color:#4ecdc4; }
+  .row .value.warn { color:#ffb347; }
+  .row .value.danger { color:#ff6b6b; }
+  .bar {
+    height:14px; border-radius:8px; overflow:hidden;
+    background:rgba(255,255,255,0.1); margin-bottom:10px;
+  }
+  .bar-fill {
+    height:100%; width:0%; border-radius:8px;
+    background:linear-gradient(90deg,#4ecdc4,#39d98a);
+    transition:width .6s ease, background .3s;
+  }
+  .bar-fill.warn { background:linear-gradient(90deg,#ffd700,#ff8822); }
+  .bar-fill.danger { background:linear-gradient(90deg,#ff6b6b,#c0392b); }
+  .meta { font-size:12px; color:#8888bb; line-height:1.7; }
+  .btn {
+    width:100%; padding:12px; border-radius:10px; border:none;
+    font-size:15px; font-weight:bold; cursor:pointer; margin-top:8px;
+    transition:0.15s;
+  }
+  .btn:active { transform:scale(0.98); }
+  .btn-primary { background:linear-gradient(135deg,#ffd700,#ff8822); color:#1a1a2e; }
+  .btn-secondary { background:rgba(78,205,196,0.15); color:#4ecdc4; border:1px solid rgba(78,205,196,0.4); }
+  .btn:disabled { opacity:0.5; cursor:not-allowed; }
+  .msg { font-size:13px; margin-top:10px; min-height:18px; }
+  .msg.ok { color:#39d98a; }
+  .msg.err { color:#ff8888; }
+  .hidden { display:none !important; }
+  .node-picker {
+    position:fixed; top:14px; right:14px; z-index:100;
+    display:flex; align-items:center; gap:6px;
+    background:rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.15);
+    border-radius:999px; padding:6px 12px; font-size:13px; color:#fff;
+    backdrop-filter:blur(8px);
+  }
+  .node-picker select {
+    background:transparent; color:#fff; border:none; font-size:13px;
+    cursor:pointer; outline:none; font-family:inherit;
+  }
+  .node-picker select option { background:#1a1a2e; color:#fff; }
+  .kv-chip {
+    display:inline-block; font-size:11px; padding:2px 8px; border-radius:999px;
+    background:rgba(78,205,196,0.15); color:#4ecdc4; border:1px solid rgba(78,205,196,0.3);
+    margin-left:8px; vertical-align:middle;
+  }
+</style>
+</head>
+<body>
+<div class="node-picker">
+  <span>🌐</span>
+  <select id="nodeSelect" onchange="switchNode(this.value)">
+    <option value="us">🇺🇸 国际服务器</option>
+    <option value="cn">🇨🇳 中国大陆</option>
+  </select>
+</div>
+
+<div class="container">
+  <div class="header">
+    <h1 id="pageTitle">📊 额度状态</h1>
+    <p id="pageSubtitle">查看你的应用使用额度</p>
+  </div>
+
+  <div id="loginHintCard" class="card hidden">
+    <h2>需要登录</h2>
+    <div class="desc">额度与账号绑定，请先登录后再查看。</div>
+    <button class="btn btn-primary" onclick="location.href='index.html'">前往登录</button>
+  </div>
+
+  <div id="quotaPage" class="hidden">
+    <div class="card">
+      <h2>🎬 识图导入额度 <span id="modeChip" class="kv-chip hidden">KV</span></h2>
+      <div class="desc">用于《单词闯关》词书编辑器「📷 识图导入词书」，上传词书截图自动识别成单词表。</div>
+      <div class="row">
+        <span class="label">今日已用</span>
+        <span class="value" id="visionUsed">–</span>
+      </div>
+      <div class="bar"><div class="bar-fill" id="visionBar"></div></div>
+      <div class="meta" id="visionMeta">正在读取…</div>
+      <button class="btn btn-secondary" style="margin-top:14px;" onclick="window.open('https://wordgm.r6t5.dpdns.org/dict/editor.html','_blank','noopener')">去词书编辑器使用 →</button>
+    </div>
+
+    <div class="card">
+      <h2>⏱ 限流规则</h2>
+      <div class="desc" style="margin-bottom:10px;">为了防止滥用导致算力被刷光，识图接口有两层限制：</div>
+      <div class="meta">
+        · 每人每天最多 <b>40 页</b>（按北京时间每日 00:00 重置）<br>
+        · 每人每分钟最多 <b>6 次</b>（防止连点/脚本）<br>
+        · 单张图片建议 1600px 以内，超出会自动压缩
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>👤 当前账号</h2>
+      <div class="meta" id="accountLine">—</div>
+      <div class="meta" id="nodeLine" style="margin-top:4px;">—</div>
+    </div>
+
+    <button class="btn btn-secondary" onclick="loadQuota(true)">🔄 刷新额度</button>
+    <div class="msg" id="pageMsg"></div>
+  </div>
+</div>
+
+<script src="sbauth.js?v=20261113"></script>
+<script>
+// 额度查询走《单词闯关》的 Pages Function（同账号、同 Supabase 项目）
+const VISION_API = "https://wordgm.r6t5.dpdns.org/api/vision";
+
+const Q = new URLSearchParams(location.search);
+const NODE = Q.get("country") === "cn" ? "cn" : (Q.get("country") === "us" || Q.get("country") === "cf" ? "us" : (sessionStorage.getItem("wordGameCountry") === "cn" ? "cn" : "us"));
+
+function initNodeUI() {
+  const sel = document.getElementById("nodeSelect");
+  sel.value = NODE;
+}
+function switchNode(v) {
+  const url = new URL(location.href);
+  url.searchParams.set("country", v === "cn" ? "cn" : "us");
+  location.href = url.toString();
+}
+
+async function loadQuota(force) {
+  const msg = document.getElementById("pageMsg");
+  const usedEl = document.getElementById("visionUsed");
+  const barEl = document.getElementById("visionBar");
+  const metaEl = document.getElementById("visionMeta");
+  if (msg && force) msg.textContent = "";
+
+  const user = (typeof sbGetUser === "function") ? sbGetUser() : null;
+  document.getElementById("loginHintCard").classList.toggle("hidden", !!user);
+  document.getElementById("quotaPage").classList.toggle("hidden", !user);
+  if (!user) return;
+
+  document.getElementById("accountLine").textContent = (user.name && user.name !== user.email) ? (user.name + " · " + user.email) : user.email;
+  document.getElementById("nodeLine").textContent = "节点：" + (NODE === "cn" ? "🇨🇳 中国大陆" : "🇺🇸 国际服务器");
+
+  let token = null;
+  try {
+    token = (typeof sbGetAccessToken === "function") ? await sbGetAccessToken() : null;
+  } catch (e) {}
+
+  if (!token) {
+    usedEl.textContent = "–";
+    metaEl.textContent = "登录状态已过期，请回首页重新登录";
+    return;
+  }
+
+  usedEl.textContent = "读取中…";
+  try {
+    const resp = await fetch(VISION_API, {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
+      body: JSON.stringify({ quotaOnly: true })
+    });
+    const d = await resp.json();
+    if (!resp.ok || !d.ok) throw new Error(d.error || ("HTTP " + resp.status));
+
+    const q = d.quota || {};
+    const used = q.used || 0;
+    const limit = q.limit || 40;
+    const remain = Math.max(0, limit - used);
+    const pct = Math.min(100, Math.round(used / limit * 100));
+
+    usedEl.textContent = used + " / " + limit;
+    usedEl.className = "value" + (pct >= 100 ? " danger" : pct >= 75 ? " warn" : "");
+    barEl.style.width = pct + "%";
+    barEl.className = "bar-fill" + (pct >= 100 ? " danger" : pct >= 75 ? " warn" : "");
+
+    const reset = nextResetText();
+    metaEl.innerHTML = "剩余 <b>" + remain + "</b> 页 · 已用 " + pct + "% · " + reset;
+
+    const chip = document.getElementById("modeChip");
+    chip.classList.toggle("hidden", !q.mode);
+    if (q.mode) chip.textContent = q.mode === "kv" ? "精确保额（KV）" : "内存兜底";
+  } catch (e) {
+    usedEl.textContent = "–";
+    barEl.style.width = "0%";
+    metaEl.textContent = "读取失败：" + ((e && e.message) || e);
+  }
+}
+
+function nextResetText() {
+  const now = new Date();
+  const cn = new Date(now.getTime() + (now.getTimezoneOffset() + 480) * 60000); // UTC+8
+  const next = new Date(Date.UTC(cn.getUTCFullYear(), cn.getUTCMonth(), cn.getUTCDate() + 1, 0, 0, 0));
+  const hours = Math.round((next.getTime() - 480 * 60000 - Date.now()) / 3600000);
+  return "约 " + Math.max(1, hours) + " 小时后重置（北京时间 00:00）";
+}
+
+initNodeUI();
+loadQuota();
+</script>
+<script src="sidebar.js?v=20261113"></script>
+</body>
+</html>
