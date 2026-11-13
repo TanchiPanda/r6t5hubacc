@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>授权管理 · R6T5 Hub</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; font-family:"Microsoft Yahei","PingFang SC",-apple-system,sans-serif; }
+  body {
+    min-height:100vh;
+    background:linear-gradient(135deg,#1a1a2e,#16213e,#0f3460);
+    color:#fff; display:flex; align-items:flex-start; justify-content:center;
+    padding:40px 16px;
+  }
+  .container { width:100%; max-width:520px; }
+  .header { text-align:center; margin-bottom:24px; }
+  .header h1 { font-size:24px; color:#ffd700; letter-spacing:2px; }
+  .header p { font-size:13px; color:#a8a8d8; margin-top:6px; }
+  .card {
+    background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1);
+    border-radius:16px; padding:22px; margin-bottom:16px; backdrop-filter:blur(10px);
+  }
+  .card h2 { font-size:16px; color:#ffd700; margin-bottom:10px; display:flex; align-items:center; justify-content:space-between; }
+  .empty {
+    padding:26px 0; text-align:center; color:#8888bb; font-size:14px;
+    border:1px dashed rgba(255,255,255,0.15); border-radius:12px;
+  }
+  .note { font-size:13px; color:#a8a8d8; line-height:1.75; }
+  .btn {
+    width:100%; padding:12px; border-radius:10px; border:none; font-size:15px;
+    font-weight:bold; cursor:pointer; margin-top:10px; transition:.15s;
+  }
+  .btn:active { transform:scale(.98); }
+  .btn-primary { background:linear-gradient(135deg,#ffd700,#ff8822); color:#1a1a2e; }
+  .btn-secondary { background:rgba(78,205,196,.15); color:#4ecdc4; border:1px solid rgba(78,205,196,.4); }
+  .btn-ghost { background:rgba(255,255,255,.08); color:#c8c8e8; border:1px solid rgba(255,255,255,.15); }
+  .btn-danger { background:rgba(255,100,100,.15); color:#ff6b6b; border:1px solid rgba(255,107,107,.4); }
+  .btn:disabled { opacity:.5; cursor:not-allowed; }
+  .btn-sm { width:auto; padding:6px 12px; font-size:13px; margin:0; }
+  input, select {
+    width:100%; padding:12px; border-radius:10px; border:1px solid rgba(255,255,255,.2);
+    background:rgba(255,255,255,.08); color:#fff; font-size:14px; margin-top:8px;
+  }
+  input::placeholder { color:#8888bb; }
+  select option { background:#1a1a2e; }
+  .msg { font-size:13px; margin-top:10px; min-height:18px; }
+  .msg.ok { color:#39d98a; }
+  .msg.err { color:#ff8888; }
+  .hidden { display:none !important; }
+  .row { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 0; border-bottom:1px solid rgba(255,255,255,.08); }
+  .row:last-child { border-bottom:none; }
+  .prod-name { font-size:14px; font-weight:bold; }
+  .prod-meta { font-size:12px; color:#a8a8d8; margin-top:3px; line-height:1.6; }
+  .chip { display:inline-block; font-size:11px; padding:2px 8px; border-radius:999px; margin-left:6px; vertical-align:middle; }
+  .chip-ok { background:rgba(57,217,138,.15); color:#39d98a; border:1px solid rgba(57,217,138,.4); }
+  .chip-wait { background:rgba(255,184,77,.15); color:#ffb84d; border:1px solid rgba(255,184,77,.4); }
+  .chip-empty { background:rgba(136,136,187,.15); color:#8888bb; border:1px solid rgba(136,136,187,.3); }
+  .dns {
+    background:rgba(0,0,0,.3); border:1px solid rgba(255,255,255,.12); border-radius:10px;
+    padding:12px; margin-top:10px; font-size:12px; line-height:1.9; word-break:break-all;
+  }
+  .dns b { color:#4ecdc4; font-weight:normal; }
+  .kbd { font-family:Consolas,monospace; background:rgba(255,255,255,.1); padding:1px 6px; border-radius:4px; }
+  .locked-tip { font-size:12px; color:#ffb84d; margin-top:6px; }
+  .divider { height:1px; background:rgba(255,255,255,.1); margin:16px 0; }
+  .stack { display:flex; gap:8px; }
+  .stack > * { flex:1; }
+  .star-line { font-size:13px; color:#c8c8e8; line-height:1.8; }
+  .star-line b { color:#ffd700; }
+  .admin-item { padding:12px; border:1px solid rgba(255,255,255,.12); border-radius:10px; margin-bottom:10px; font-size:12px; line-height:1.7; word-break:break-all; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>🔑 授权管理</h1>
+    <p>管理你的产品授权与域名席位</p>
+  </div>
+
+  <div id="needLogin" class="card hidden">
+    <h2>需要登录</h2>
+    <div class="note">授权与账号绑定，请先登录后再管理。</div>
+    <button class="btn btn-primary" onclick="location.href='index.html'">前往登录</button>
+  </div>
+
+  <div id="mainArea" class="hidden">
+    <!-- 授权产品 -->
+    <div class="card">
+      <h2>授权产品</h2>
+      <div id="licEmpty" class="empty">空</div>
+      <div id="licList"></div>
+    </div>
+
+    <!-- 添加产品 -->
+    <div class="card">
+      <h2>
+        <span>添加产品</span>
+        <button class="btn btn-sm btn-ghost" id="toggleAdd" onclick="toggleAdd()">展开 ▾</button>
+      </h2>
+      <div id="addBox" class="hidden">
+        <div id="addEmpty" class="empty">暂无可用产品</div>
+        <div id="addList"></div>
+        <div class="divider"></div>
+        <div class="note">已有产品密钥？直接兑换：</div>
+        <input id="keyInput" placeholder="XXXXX-XXXXX-XXXXX" autocomplete="off" spellcheck="false" style="text-transform:uppercase;">
+        <button class="btn btn-secondary" onclick="redeemKey()">兑换密钥</button>
+      </div>
+    </div>
+
+    <!-- Star 领取 -->
+    <div class="card" id="starCard">
+      <h2>⭐ Star 领取席位</h2>
+      <div class="star-line">
+        给我们的 <b>r6t5-docs-community</b> Star 的用户，可领取一个域名席位。
+      </div>
+      <button class="btn btn-primary" id="claimBtn" onclick="startClaim()">去领取</button>
+      <div class="msg" id="claimMsg"></div>
+    </div>
+
+    <!-- 管理员审核 -->
+    <div class="card hidden" id="adminCard">
+      <h2>🛠 人工审核</h2>
+      <div class="note" id="adminHint" style="margin-bottom:10px;">待审核的绑定与授权：</div>
+      <div id="adminList"></div>
+    </div>
+
+    <button class="btn btn-secondary" onclick="location.href='index.html'">返回账号中心</button>
+    <div class="msg" id="pageMsg"></div>
+  </div>
+</div>
+
+<script src="sbauth.js?v=20261113"></script>
+<script>
+/* 授权服务地址：部署 Worker 后改成你的实际域名 */
+const LIC_API = (function () {
+  const q = new URLSearchParams(location.search).get("lic");
+  if (q) return q.replace(/\/$/, "");
+  try {
+    const saved = localStorage.getItem("r6t5LicApi");
+    if (saved) return saved.replace(/\/$/, "");
+  } catch (e) {}
+  return "https://lic.r6t5.dpdns.org";
+})();
+
+const STATUS_TEXT = {
+  active: { text: "已激活", cls: "chip-ok" },
+  pending_dns: { text: "待验证 TXT", cls: "chip-wait" },
+  pending_review: { text: "待人工审核", cls: "chip-wait" },
+  rejected: { text: "已驳回", cls: "chip-empty" },
+  revoked: { text: "已吊销", cls: "chip-empty" },
+};
+
+let state = { licenses: [], isAdmin: false };
+let busy = false;
+
+function $(id) { return document.getElementById(id); }
+function esc(s) {
+  return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+function setMsg(id, text, ok) {
+  const el = $(id);
+  if (!el) return;
+  el.textContent = text || "";
+  el.className = "msg " + (ok ? "ok" : "err");
+}
+
+async function api(path, opts) {
+  const token = await sbGetAccessToken();
+  if (!token) throw new Error("登录状态已过期，请重新登录");
+  const r = await fetch(LIC_API + path, Object.assign({
+    headers: Object.assign({ Authorization: "Bearer " + token, "Content-Type": "application/json" }, (opts && opts.headers) || {}),
+  }, opts || {}));
+  let data;
+  try { data = await r.json(); } catch (e) { throw new Error("授权服务返回异常（HTTP " + r.status + "）"); }
+  if (!r.ok || !data.ok) throw new Error(data.error || ("HTTP " + r.status));
+  return data;
+}
+
+/* ---------------- 渲染 ---------------- */
+
+function renderLicenses() {
+  const list = state.licenses || [];
+  $("licEmpty").classList.toggle("hidden", list.length > 0);
+  const box = $("licList");
+  if (!list.length) { box.innerHTML = ""; return; }
+
+  box.innerHTML = list.map(function (l) {
+    const st = STATUS_TEXT[l.status] || STATUS_TEXT.pending_review;
+    let line = "";
+    if (l.binding) {
+      const bs = STATUS_TEXT[l.binding.status] || STATUS_TEXT.pending_review;
+      const kindText = l.binding.kind === "domain" ? "域名" : "项目名";
+      line = '<div class="prod-meta">已绑定' + kindText + '：<b>' + esc(l.binding.value) + '</b>'
+        + '<span class="chip ' + bs.cls + '">' + bs.text + '</span></div>';
+      if (l.binding.status === "active") {
+        line += '<div class="locked-tip">🔒 绑定已锁定，不可修改</div>';
+      }
+      if (l.binding.status === "pending_review") {
+        line += '<div class="locked-tip">已提交人工审核，审核通过后自动激活，且不可修改</div>';
+      }
+      if (l.binding.status === "pending_dns") {
+        line += dnsBox(l.binding);
+      }
+      if (l.binding.status === "rejected" && l.binding.reviewNote) {
+        line += '<div class="locked-tip">驳回原因：' + esc(l.binding.reviewNote) + '</div>';
+      }
+    } else if (l.status === "pending_review") {
+      line = '<div class="prod-meta">授权待人工审核，通过后即可绑定</div>';
+    } else {
+      line = '<div class="prod-meta">尚未绑定域名或项目名</div>' + bindForm(l);
+    }
+    return '<div class="row"><div style="flex:1;min-width:0;">'
+      + '<div class="prod-name">' + esc(l.productLabel) + ' (' + (l.seats || 1) + ' domain)'
+      + '<span class="chip ' + st.cls + '">' + st.text + '</span></div>'
+      + line + '</div></div>';
+  }).join("");
+}
+
+function dnsBox(b) {
+  const rec = "_r6t5-verify." + b.value;
+  const val = "r6t5-verify=" + (b.verifyToken || "");
+  return '<div class="dns">在 DNS 服务商添加记录：<br>'
+    + '类型 <b>TXT</b> · 主机记录 <b>' + esc(rec) + '</b><br>'
+    + '记录值 <b>' + esc(val) + '</b><br>'
+    + '<span style="color:#8888bb;">（若服务商只支持根域名，也可把同样内容加到 <b>' + esc(b.value) + '</b>）</span></div>'
+    + '<button class="btn btn-secondary" onclick="verifyDns(\'' + b.id + '\')">验证 TXT 记录</button>';
+}
+
+function bindForm(l) {
+  if (l.status !== "active") return "";
+  return '<div class="divider"></div>'
+    + '<div class="note">绑定域名或项目名（二选一，<b style="color:#ffb84d;">绑定后不可修改</b>）：</div>'
+    + '<select id="bindKind"><option value="domain">域名</option><option value="repo">GitHub 项目名</option></select>'
+    + '<input id="bindValue" placeholder="notes.example.com 或 owner/repo" autocomplete="off">'
+    + '<button class="btn btn-secondary" onclick="submitBind()">确认绑定</button>'
+    + '<div class="msg" id="bindMsg"></div>';
+}
+
+function renderAdd() {
+  const add = (state.licenses || []).filter(function (l) { return l.status !== "revoked"; });
+  $("addEmpty").classList.toggle("hidden", add.length > 0);
+  $("addList").innerHTML = add.map(function (l) {
+    const st = STATUS_TEXT[l.status] || STATUS_TEXT.pending_review;
+    return '<div class="row"><div><div class="prod-name">' + esc(l.productLabel) + ' (' + (l.seats || 1) + ' domain)'
+      + '<span class="chip ' + st.cls + '">' + st.text + '</span></div>'
+      + '<div class="prod-meta">' + (l.binding ? esc(l.binding.value) : "待绑定") + '</div></div></div>';
+  }).join("");
+  // 已持有该产品则不再显示领取按钮
+  const hasPro = add.some(function (l) { return l.product === "docs-pro"; });
+  $("claimBtn").classList.toggle("hidden", hasPro);
+}
+
+function toggleAdd() {
+  const box = $("addBox");
+  box.classList.toggle("hidden");
+  $("toggleAdd").textContent = box.classList.contains("hidden") ? "展开 ▾" : "收起 ▴";
+}
+
+/* ---------------- 数据加载 ---------------- */
+
+async function load() {
+  try {
+    const d = await api("/api/license/list");
+    state.licenses = d.licenses || [];
+    state.isAdmin = !!d.isAdmin;
+    renderLicenses();
+    renderAdd();
+    $("adminCard").classList.toggle("hidden", !state.isAdmin);
+    if (state.isAdmin) loadAdmin();
+    setMsg("pageMsg", "");
+  } catch (e) {
+    setMsg("pageMsg", (e && e.message) || "加载失败", false);
+    // 服务未部署时给出可操作的提示
+    if (/HTTP 404|Failed to fetch|NetworkError|返回异常/.test(String((e && e.message) || ""))) {
+      $("pageMsg").textContent += "（授权服务未部署或地址错误，可在链接后加 ?lic=你的Worker地址）";
+    }
+  }
+}
+
+/* ---------------- 领取 Star 席位 ---------------- */
+
+async function startClaim() {
+  if (busy) return;
+  busy = true;
+  $("claimBtn").disabled = true;
+  $("claimBtn").textContent = "正在跳转 GitHub…";
+  try {
+    const d = await api("/api/github/start", { method: "POST", body: JSON.stringify({}) });
+    location.href = d.url;
+  } catch (e) {
+    setMsg("claimMsg", (e && e.message) || "发起授权失败", false);
+    busy = false;
+    $("claimBtn").disabled = false;
+    $("claimBtn").textContent = "去领取";
+  }
+}
+
+/* ---------------- 绑定 ---------------- */
+
+async function submitBind() {
+  if (busy) return;
+  const kind = $("bindKind").value;
+  const value = ($("bindValue").value || "").trim();
+  if (!value) { setMsg("bindMsg", "请填写内容", false); return; }
+  if (!confirm("绑定后不可修改，确认提交 " + value + " ？")) return;
+  busy = true;
+  try {
+    const d = await api("/api/license/bind", { method: "POST", body: JSON.stringify({ kind: kind, value: value }) });
+    setMsg("bindMsg", d.message || "已提交", true);
+    await load();
+  } catch (e) {
+    setMsg("bindMsg", (e && e.message) || "绑定失败", false);
+  }
+  busy = false;
+}
+
+async function verifyDns(bindingId) {
+  if (busy) return;
+  busy = true;
+  try {
+    const d = await api("/api/license/verify-dns", { method: "POST", body: JSON.stringify({ bindingId: bindingId }) });
+    await load();
+    setMsg("pageMsg", d.already ? "该域名已激活" : "域名验证通过，席位已激活", true);
+  } catch (e) {
+    setMsg("pageMsg", (e && e.message) || "验证失败", false);
+  }
+  busy = false;
+}
+
+/* ---------------- 密钥兑换 ---------------- */
+
+async function redeemKey() {
+  if (busy) return;
+  const key = ($("keyInput").value || "").trim();
+  if (!key) { setMsg("pageMsg", "请输入产品密钥", false); return; }
+  busy = true;
+  try {
+    const d = await api("/api/license/redeem", { method: "POST", body: JSON.stringify({ key: key }) });
+    $("keyInput").value = "";
+    await load();
+    setMsg("pageMsg", "兑换成功：" + (d.productLabel || d.product), true);
+  } catch (e) {
+    setMsg("pageMsg", (e && e.message) || "兑换失败", false);
+  }
+  busy = false;
+}
+
+/* ---------------- 管理员 ---------------- */
+
+async function loadAdmin() {
+  try {
+    const d = await api("/api/admin/pending");
+    const items = [];
+    (d.bindings || []).forEach(function (b) {
+      items.push('<div class="admin-item">'
+        + '<div><b>' + esc(b.kind === "domain" ? "域名" : "项目名") + '</b>：' + esc(b.value) + '</div>'
+        + '<div>账号：' + esc(b.user_email) + ' · GitHub：' + esc(b.github_login || "-") + '</div>'
+        + '<div style="margin-top:8px;" class="stack">'
+        + '<button class="btn btn-sm btn-secondary" onclick="review(\'binding\',\'' + b.id + '\',true)">通过</button>'
+        + '<button class="btn btn-sm btn-danger" onclick="review(\'binding\',\'' + b.id + '\',false)">驳回</button>'
+        + '</div></div>');
+    });
+    (d.licenses || []).forEach(function (l) {
+      items.push('<div class="admin-item">'
+        + '<div><b>授权待审</b>：' + esc(l.user_email) + '</div>'
+        + '<div>产品：' + esc(l.product) + ' · 来源：' + esc(l.source) + ' · GitHub：' + esc(l.github_login || "-") + '</div>'
+        + '<div>原因：' + esc(l.note || "新号风控") + '</div>'
+        + '<div style="margin-top:8px;" class="stack">'
+        + '<button class="btn btn-sm btn-secondary" onclick="review(\'license\',\'' + l.id + '\',true)">通过</button>'
+        + '<button class="btn btn-sm btn-danger" onclick="review(\'license\',\'' + l.id + '\',false)">驳回</button>'
+        + '</div></div>');
+    });
+    $("adminList").innerHTML = items.length ? items.join("") : '<div class="note">暂无待审核记录</div>';
+  } catch (e) {
+    $("adminList").innerHTML = '<div class="note">读取失败：' + esc((e && e.message) || "") + '</div>';
+  }
+}
+
+async function review(target, id, approve) {
+  const note = approve ? "" : (prompt("驳回原因（可选）") || "");
+  try {
+    await api("/api/admin/review", { method: "POST", body: JSON.stringify({ target: target, id: id, approve: approve, note: note }) });
+    await load();
+  } catch (e) {
+    alert((e && e.message) || "审核失败");
+  }
+}
+
+/* ---------------- 启动 ---------------- */
+
+function handleClaimResult() {
+  const q = new URLSearchParams(location.search);
+  const c = q.get("claim");
+  if (!c) return;
+  const map = {
+    ok: ["席位领取成功，请在「添加产品」中完成绑定", true],
+    review: ["领取成功，因账号较新需人工审核，通过后即可绑定", true],
+    exists: ["该账号已领取过席位", true],
+    reused: ["该 GitHub 账号已被其他 r6t5 账号使用，不能重复领取", false],
+    nostar: ["未检测到 Star，请先给 r6t5-docs-community 点 Star 后再领取", false],
+    expired: ["授权链接已过期，请重新领取", false],
+    error: ["GitHub 授权失败，请重试", false],
+  };
+  const m = map[c] || ["领取未完成", false];
+  setMsg("claimMsg", m[0], m[1]);
+  q.delete("claim");
+  const clean = location.pathname + (q.toString() ? "?" + q.toString() : "");
+  history.replaceState(null, "", clean);
+}
+
+(async function () {
+  try {
+    var result = await msHandleRedirect();
+    var user = result || sbGetUser();
+    if (!user) { $("needLogin").classList.remove("hidden"); return; }
+    $("mainArea").classList.remove("hidden");
+    await load();
+    handleClaimResult();
+  } catch (e) {
+    $("needLogin").classList.remove("hidden");
+  }
+})();
+</script>
+<script src="sidebar.js?v=20261113"></script>
+</body>
+</html>

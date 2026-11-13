@@ -1,0 +1,33 @@
+name = "r6t5-lic"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+
+# ===== 部署前必填 =====
+# npx wrangler d1 create r6t5-lic-db   然后把返回的 database_id 填到下面
+[[d1_databases]]
+binding = "DB"
+database_name = "r6t5-lic-db"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+
+[vars]
+# Hub 页面允许的来源（逗号分隔，可含 *.r6t5.dpdns.org）
+ALLOWED_ORIGINS = "https://acc.r6t5.dpdns.org,https://r6t5.dpdns.org,https://tanchipanda.github.io"
+# 领取 Star 的目标仓库
+STAR_REPO = "TanchiPanda/r6t5-docs-community"
+# 产品编码 -> 显示名
+PRODUCTS = '{"docs-pro":{"label":"r6t5-docs pro","seats":1}}'
+# 管理员邮箱（逗号分隔），用于人工审核
+ADMIN_EMAILS = "REPLACE_WITH_YOUR_EMAIL"
+# GitHub OAuth 回调前缀（部署后的 Worker 域名）
+PUBLIC_BASE = "https://lic.r6t5.dpdns.org"
+# 领取成功后跳回的页面
+HUB_RETURN = "https://acc.r6t5.dpdns.org/license.html"
+# 新注册 GitHub 账号（天数）自动转人工审核
+MIN_GITHUB_AGE_DAYS = "30"
+
+# ===== 密钥 =====
+# npx wrangler secret put GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET
+# npx wrangler secret put KEY_HMAC_SECRET   （与 scripts/gen-key.mjs 的 --secret 必须一致）
+# npx wrangler secret put IP_SALT
+# npx wrangler secret put SUPABASE_CN_URL / SUPABASE_CN_ANON
+# npx wrangler secret put SUPABASE_INTL_URL / SUPABASE_INTL_ANON

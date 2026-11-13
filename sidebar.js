@@ -8,6 +8,7 @@
   const items = [
     { icon: "🏠", label: "首页", href: "index.html", match: ["index.html", ""] },
     { icon: "📊", label: "额度状态", href: "egree.html", match: ["egree.html"] },
+    { icon: "🔑", label: "授权管理", href: "license.html", match: ["license.html"] },
     { icon: "⚡", label: "单词闯关", href: "https://wordgm.r6t5.dpdns.org", match: [] },
     { icon: "💰", label: "积分钱包", href: "https://wallet.r6t5.dpdns.org", match: [] },
     { icon: "📕", label: "错题本", href: "https://wrobook.r6t5.dpdns.org", match: [] },
