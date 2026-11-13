@@ -199,8 +199,10 @@ const APP_URLS = {
   wallet: "https://wallet.r6t5.dpdns.org",
   wrobook: "https://wrobook.r6t5.dpdns.org",
   tanchi: "https://tanchi.r6t5.dpdns.org",
-  "open-platform": "https://myacc.r6t5.dpdns.org/open-platform.html"
+  "open-platform": "https://partner.r6t5.dpdns.org"
 };
+// 没带 return 时，登录完成回到应用自己的站点
+const APP_RETURNS = { "open-platform": "https://partner.r6t5.dpdns.org" };
 
 let turnLoginToken = null;
 let turnRegToken = null;
@@ -544,9 +546,10 @@ async function sendMagicLink() {
 }
 
 async function afterLogin(u) {
-  if (RETURN_URL) {
+  const BACK_URL = RETURN_URL || (APP_RETURNS[APP] || "");
+  if (BACK_URL) {
     try {
-      var ru = new URL(RETURN_URL, location.origin);
+      var ru = new URL(BACK_URL, location.origin);
       if (ru.protocol === "https:" && ru.hostname.endsWith(".r6t5.dpdns.org")) {
         // 把 Supabase 会话带给应用：应用侧用 sbResolveAuth 消费 hash 后即可拿到 JWT
         var hash = "";
