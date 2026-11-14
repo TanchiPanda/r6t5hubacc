@@ -50,6 +50,9 @@ export default {
       if (url.pathname === '/api/license/bind' && request.method === 'POST') {
         return await bind(request, user, env, cors);
       }
+      if (url.pathname === '/api/license/unbind' && request.method === 'POST') {
+        return await unbind(request, user, env, cors);
+      }
       if (url.pathname === '/api/license/verify-dns' && request.method === 'POST') {
         return await verifyDns(request, user, env, cors);
       }
@@ -173,19 +176,16 @@ async function listLicenses(user, env, cors) {
   }));
 
   for (const l of lic) {
-    const b = await env.DB.prepare('SELECT * FROM bindings WHERE license_id = ?').bind(l.id).first();
-    if (b) {
-      l.binding = {
-        id: b.id,
-        kind: b.kind,
-        value: b.value,
-        status: b.status,
-        verifyToken: b.verify_token,
-        verifiedAt: b.verified_at,
-        lockedAt: b.locked_at,
-        reviewNote: b.review_note,
-      };
-    }
+    const rowsB = await env.DB.prepare('SELECT * FROM bindings WHERE license_id = ? ORDER BY created_at ASC').bind(l.id).all();
+    const list = (rowsB.results || []).map((b) => ({
+      id: b.id, kind: b.kind, value: b.value, status: b.status,
+      verifyToken: b.verify_token, verifiedAt: b.verified_at,
+      lockedAt: b.locked_at, reviewNote: b.review_note,
+    }));
+    l.bindings = list;
+    l.binding = list[0] || null;      // 兼容旧前端
+    l.seatsUsed = list.length;
+    l.locked = list.length >= l.seats; // 填满即锁定
   }
   return json({ ok: true, isAdmin: isAdmin(user, env), licenses: lic }, 200, cors);
 }
@@ -327,8 +327,11 @@ async function bind(request, user, env, cors) {
   if (!lic) return json({ ok: false, error: '没有可绑定的授权产品，请先领取' }, 400, cors);
   if (lic.status === 'pending_review') return json({ ok: false, error: '该授权正在人工审核，暂不能绑定' }, 403, cors);
 
-  const existing = await env.DB.prepare('SELECT * FROM bindings WHERE license_id = ?').bind(lic.id).first();
-  if (existing) return json({ ok: false, error: '该授权已绑定，不能修改' }, 409, cors);
+  const rowsB = await env.DB.prepare('SELECT * FROM bindings WHERE license_id = ?').bind(lic.id).all();
+  const used = (rowsB.results || []).length;
+  if (used >= lic.seat_total) {
+    return json({ ok: false, error: '已填满 ' + lic.seat_total + ' 个名额，不能再修改' }, 409, cors);
+  }
 
   let value = '';
   if (kind === 'domain') {
@@ -345,15 +348,16 @@ async function bind(request, user, env, cors) {
     return json({ ok: false, error: '该' + (kind === 'domain' ? '域名' : '项目名') + '已被其他授权占用' }, 409, cors);
   }
 
+  const multi = lic.seat_total > 1;  // D5 这类多槽位产品：填了立即生效
   const token = kind === 'domain' ? crypto.randomUUID().replace(/-/g, '') : null;
-  const status = kind === 'domain' ? 'pending_dns' : 'pending_review';
+  const status = multi ? 'active' : (kind === 'domain' ? 'pending_dns' : 'pending_review');
   const id = uid('bnd');
 
   await env.DB.prepare(
     'INSERT INTO bindings (id,license_id,kind,value,verify_token,status,created_at) VALUES (?,?,?,?,?,?,?)'
   ).bind(id, lic.id, kind, value, token, status, now()).run();
 
-  await env.DB.prepare('UPDATE licenses SET seat_used = 1 WHERE id = ?').bind(lic.id).run();
+  await env.DB.prepare('UPDATE licenses SET seat_used = ? WHERE id = ?').bind(used + 1, lic.id).run();
   await audit(env, user.email, 'bind', kind + ':' + value + ' status=' + status, await ipHash(request, env));
 
   return json({
@@ -363,8 +367,37 @@ async function bind(request, user, env, cors) {
       recordName: kind === 'domain' ? '_r6t5-verify.' + value : null,
       recordValue: kind === 'domain' ? 'r6t5-verify=' + token : null,
     },
-    message: kind === 'repo' ? '已提交，等待人工审核' : '请添加 TXT 记录后点击验证',
+    message: multi ? '已占用 1 个名额，立即生效' : (kind === 'repo' ? '已提交，等待人工审核' : '请添加 TXT 记录后点击验证'),
+    seatsUsed: used + 1,
+    seatsTotal: lic.seat_total,
   }, 200, cors);
+}
+
+/* ---------------- 删除绑定（填满前可自由删改） ---------------- */
+
+async function unbind(request, user, env, cors) {
+  const body = await readJson(request);
+  const lic = await env.DB.prepare("SELECT * FROM licenses WHERE user_email = ? AND status != 'revoked' ORDER BY created_at DESC")
+    .bind(user.email).first();
+  if (!lic) return json({ ok: false, error: '没有授权产品' }, 400, cors);
+
+  const rowsB = await env.DB.prepare('SELECT * FROM bindings WHERE license_id = ?').bind(lic.id).all();
+  const list = rowsB.results || [];
+  if (list.length >= lic.seat_total) {
+    return json({ ok: false, error: '已填满 ' + lic.seat_total + ' 个名额，不能再修改' }, 409, cors);
+  }
+
+  const id = String(body.id || '');
+  const value = String(body.value || '').trim();
+  const target = id ? list.find((b) => b.id === id)
+    : value ? list.find((b) => b.value === value || b.value === normalizeHost(value) || b.value === normalizeRepo(value))
+    : null;
+  if (!target) return json({ ok: false, error: '没找到这条绑定' }, 404, cors);
+
+  await env.DB.prepare('DELETE FROM bindings WHERE id = ? AND license_id = ?').bind(target.id, lic.id).run();
+  await env.DB.prepare('UPDATE licenses SET seat_used = ? WHERE id = ?').bind(Math.max(0, list.length - 1), lic.id).run();
+  await audit(env, user.email, 'unbind', target.kind + ':' + target.value, await ipHash(request, env));
+  return json({ ok: true, seatsUsed: list.length - 1, seatsTotal: lic.seat_total }, 200, cors);
 }
 
 async function readJson(request) {
@@ -391,7 +424,11 @@ async function verifyDns(request, user, env, cors) {
     .bind(user.email).first();
   if (!lic) return json({ ok: false, error: '没有授权产品' }, 400, cors);
 
-  const b = await env.DB.prepare('SELECT * FROM bindings WHERE license_id = ?').bind(lic.id).first();
+  const body = await readJson(request);
+  const bid = String(body.bindingId || '');
+  const b = bid
+    ? await env.DB.prepare('SELECT * FROM bindings WHERE license_id = ? AND id = ?').bind(lic.id, bid).first()
+    : await env.DB.prepare("SELECT * FROM bindings WHERE license_id = ? AND kind='domain' AND status='pending_dns'").bind(lic.id).first();
   if (!b) return json({ ok: false, error: '尚未绑定域名' }, 400, cors);
   if (b.kind !== 'domain') return json({ ok: false, error: '当前绑定不是域名' }, 400, cors);
   if (b.status === 'active') return json({ ok: true, already: true, binding: { id: b.id, kind: b.kind, value: b.value, status: b.status } }, 200, cors);
@@ -501,18 +538,20 @@ async function redeem(request, user, env, cors) {
 
 async function checkHost(url, env, cors) {
   const host = normalizeHost(url.searchParams.get('host') || '');
-  if (!host) return json({ ok: false, error: 'host 无效' }, 400, cors);
+  const repo = normalizeRepo(url.searchParams.get('repo') || '');
+  if (!host && !repo) return json({ ok: false, error: 'host 无效' }, 400, cors);
 
-  const rows = await env.DB.prepare("SELECT value FROM bindings WHERE kind='domain' AND status='active'").all();
-  const domains = (rows.results || []).map((r) => r.value);
-  const hit = domains.find((d) => host === d || host.endsWith('.' + d));
+  const rows = await env.DB.prepare("SELECT kind,value FROM bindings WHERE status='active'").all();
+  const active = rows.results || [];
+  const hit = host && active.some((r) => r.kind === 'domain' && (host === r.value || host.endsWith('.' + r.value)));
+  const repoHit = repo && active.some((r) => r.kind === 'repo' && repo.toLowerCase() === r.value.toLowerCase());
 
-  let authorized = !!hit;
+  let authorized = !!(hit || repoHit);
   if (!authorized) {
     const keyed = await env.DB.prepare('SELECT used_host FROM product_keys WHERE used_host IS NOT NULL').all();
     authorized = (keyed.results || []).some((r) => host === r.used_host || host.endsWith('.' + r.used_host));
   }
-  return json({ ok: true, host, authorized, product: 'docs-pro' }, 200, cors);
+  return json({ ok: true, host, repo, authorized, product: repoHit ? 'docs-d5' : 'docs-pro' }, 200, cors);
 }
 
 async function redeemHost(request, env, cors) {

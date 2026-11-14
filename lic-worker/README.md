@@ -57,6 +57,15 @@ INSERT INTO product_keys (id,key_hash,product,batch,seat_total,revoked,created_a
 VALUES ('k_'||lower(hex(randomblob(8))), '<key_hash>', 'docs-pro', '2026Q1', 1, 0, <ms>);
 ```
 
+## 产品与名额
+
+| 产品 | 名额 | 规则 |
+|---|---|---|
+| `docs-pro` | 1 | 老口径：一条授权绑一个域名/仓库 |
+| `docs-d5` | 5 | R6T5 Docs D5：域名 / Docker / 仓库混填，**填几条生效几条，不必填满**；未满 5 条时可自由删除、改绑；**填满 5 条后锁定，不能再改** |
+
+`bindings` 表已从「每个授权只能一条」放开为多条，靠 `licenses.seat_total` 限制数量；老的库执行一次 `scripts/migrate-d5.sql`。
+
 ## 接口
 
 | 方法 | 路径 | 鉴权 | 说明 |
@@ -64,11 +73,12 @@ VALUES ('k_'||lower(hex(randomblob(8))), '<key_hash>', 'docs-pro', '2026Q1', 1, 
 | GET | `/api/license/list` | 登录 | 授权 + 绑定 + 是否管理员 |
 | POST | `/api/github/start` | 登录 | 返回 GitHub 授权 URL |
 | GET | `/api/github/callback` | state | 校验 Star → 发放席位 |
-| POST | `/api/license/bind` | 登录 | 绑定域名（待 TXT）/ 项目名（待人工审核） |
+| POST | `/api/license/bind` | 登录 | 占用一个名额（域名 / owner/repo）；D5 填了即生效，满员后拒绝 |
+| POST | `/api/license/unbind` | 登录 | 释放一个名额（body: `{id}` 或 `{value}`）；满员后拒绝 |
 | POST | `/api/license/verify-dns` | 登录 | 查 TXT 并激活 |
 | POST | `/api/license/redeem` | 登录 | 兑换 15 位密钥 |
 | POST | `/api/license/redeem-host` | 无 | 专业版站点用密钥解锁当前域名 |
-| GET | `/api/license/check-host?host=` | 无 | 专业版域名判定 |
+| GET | `/api/license/check-host?host=&repo=` | 无 | 专业版判定：域名或仓库任一命中即授权 |
 | GET | `/api/admin/pending` | 管理员 | 待审核列表 |
 | POST | `/api/admin/review` | 管理员 | 通过 / 驳回 |
 

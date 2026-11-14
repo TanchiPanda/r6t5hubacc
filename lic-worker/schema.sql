@@ -35,8 +35,7 @@ CREATE TABLE IF NOT EXISTS bindings (
   created_at    INTEGER NOT NULL,
   verified_at   INTEGER,
   locked_at     INTEGER,
-  UNIQUE (license_id),
-  UNIQUE (kind, value)                      -- 同一域名不能被两个授权占用
+  UNIQUE (kind, value)                      -- 同一域名/仓库不能被两个授权占用（一个授权可绑多条，受 seat_total 限制）
 );
 
 -- 产品密钥：15 位，入库只存 sha256

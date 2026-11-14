@@ -15,7 +15,7 @@ ALLOWED_ORIGINS = "https://acc.r6t5.dpdns.org,https://r6t5.dpdns.org,https://tan
 # 领取 Star 的目标仓库
 STAR_REPO = "TanchiPanda/r6t5-docs-community"
 # 产品编码 -> 显示名
-PRODUCTS = '{"docs-pro":{"label":"r6t5-docs pro","seats":1}}'
+PRODUCTS = '{"docs-pro":{"label":"r6t5-docs pro","seats":1},"docs-d5":{"label":"R6T5 Docs D5","seats":5}}'
 # 管理员邮箱（逗号分隔），用于人工审核
 ADMIN_EMAILS = "r6t5storage@outlook.com"
 # GitHub OAuth 回调前缀（部署后的 Worker 域名）
