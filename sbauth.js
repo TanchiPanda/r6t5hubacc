@@ -10,16 +10,18 @@
 //   4. msLogout() 只清本地（Cloudreve 无 end_session 端点）。
 
 // ---------- Cloudreve OAuth 配置（管理面板 → OAuth 应用） ----------
+// 注意：client_secret 不下发前端，换 token/刷新/userinfo 均经 CF Pages Function 同源代理，
+// secret 只配在 Pages 环境变量 CB_CLIENT_SECRET。
 var CB_BASE = "https://netdisk.r6t5.dpdns.org";
 var CB_CLIENT_ID = "efdf62d2-e83b-41fd-8bce-7ac453c4fa1e";
-var CB_CLIENT_SECRET = "HhHF5qraMcYrCb6vDGpvLMbmPlAPCCO0";
 var CB_REDIRECT_URI = "https://myacc.r6t5.dpdns.org/callback";
 var CB_SCOPE = "openid email profile offline_access UserInfo.Write UserSecurityInfo.Write Files.Write Shares.Write Workflow.Write Finance.Write DavAccount.Write";
 
 var CB_AUTHORIZE = CB_BASE + "/session/authorize";
-var CB_TOKEN = CB_BASE + "/api/v4/session/oauth/token";
-var CB_REFRESH = CB_BASE + "/api/v4/session/token/refresh";
-var CB_USERINFO = CB_BASE + "/api/v4/session/oauth/userinfo";
+// 同源 Pages Function 代理（functions/api/），避开 Cloudreve 未配 CORS 的问题
+var CB_TOKEN_PROXY = "/api/cb-token";
+var CB_REFRESH_PROXY = "/api/cb-refresh";
+var CB_USERINFO_PROXY = "/api/cb-userinfo";
 
 // ---------- 本地存储键 ----------
 var CB_USER_KEY = "wordGameGitHubUser";   // 与旧缓存键保持一致，便于其它站读取 ms_user
@@ -129,31 +131,28 @@ var msGetUser = sbGetUser;
 
 // ---------- 换 token / 刷新 ----------
 async function _cbExchangeCode(code, codeVerifier) {
-    var body = new URLSearchParams({
-        grant_type: "authorization_code",
-        client_id: CB_CLIENT_ID,
-        client_secret: CB_CLIENT_SECRET,
-        code: code,
-        redirect_uri: CB_REDIRECT_URI,
-        code_verifier: codeVerifier || ""
-    });
-    var r = await fetch(CB_TOKEN, {
+    var r = await fetch(CB_TOKEN_PROXY, {
         method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: body.toString()
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            code: code,
+            code_verifier: codeVerifier || "",
+            redirect_uri: CB_REDIRECT_URI
+        })
     });
     var d = await r.json().catch(function () { return {}; });
-    if (!r.ok || !d.access_token) {
-        throw new Error((d && d.msg) || (d && d.error_description) || ("换 token 失败 HTTP " + r.status));
+    var data = d.data || d;
+    if (!r.ok || !data.access_token) {
+      throw new Error((d && d.msg) || (data && data.msg) || (d && d.error_description) || ("换 token 失败 HTTP " + r.status));
     }
-    _cbSaveTokens(d.access_token, d.refresh_token, d.expires_in);
-    return d;
+    _cbSaveTokens(data.access_token, data.refresh_token, data.expires_in);
+    return data;
 }
 
 async function _cbRefresh() {
     var rt = cbGetRefreshToken();
     if (!rt) return null;
-    var r = await fetch(CB_REFRESH, {
+    var r = await fetch(CB_REFRESH_PROXY, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ refresh_token: rt })
@@ -185,7 +184,7 @@ function msHasToken() { return !!cbGetRefreshToken() || !!cbGetAccessToken(); }
 async function sbRefreshUser() {
     var at = await sbGetAccessToken();
     if (!at) return null;
-    var r = await fetch(CB_USERINFO, { headers: { Authorization: "Bearer " + at } });
+    var r = await fetch(CB_USERINFO_PROXY, { headers: { Authorization: "Bearer " + at } });
     if (!r.ok) return sbGetUser();
     var info = await r.json().catch(function () { return null; });
     var u = _cbMapUser(info);
