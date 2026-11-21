@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>R6T5 Hub · 注册</title>
+<title>R6T5 Hub · 账号说明</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; font-family:"Microsoft Yahei","PingFang SC",-apple-system,sans-serif; }
   body {
@@ -27,11 +27,11 @@
   .btn {
     width:100%; padding:12px; border-radius:10px; border:none;
     font-size:15px; font-weight:bold; cursor:pointer; margin-top:10px;
+    display:block; text-align:center; text-decoration:none; box-sizing:border-box;
   }
-  .btn:active { transform:scale(0.98); }
   .btn-primary { background:linear-gradient(135deg,#ffd700,#ff8822); color:#1a1a2e; }
-  .btn-secondary { background:rgba(78,205,196,0.15); color:#4ecdc4; border:1px solid rgba(78,205,196,0.4); display:block; text-align:center; text-decoration:none; box-sizing:border-box; }
-  .note { font-size:14px; color:#a8a8d8; line-height:1.8; }
+  .btn-secondary { background:rgba(78,205,196,0.15); color:#4ecdc4; border:1px solid rgba(78,205,196,0.4); }
+  .note { font-size:14px; color:#a8a8d8; line-height:1.9; }
   .step { font-size:14px; line-height:1.9; color:#cfcfe8; padding-left:4px; }
   .step b { color:#ffd700; }
 </style>
@@ -40,38 +40,30 @@
 <div class="container">
   <div class="header">
     <h1 id="pageTitle">⚡ R6T5 Hub</h1>
-    <p id="pageSubtitle">注册账号</p>
+    <p id="pageSubtitle">账号说明</p>
   </div>
   <div class="card">
-    <h2>注册</h2>
+    <h2>账号从哪来？</h2>
     <div class="note" style="margin-bottom:14px;">
-      本平台不单独存储账号密码，统一使用 <b style="color:#ffd700;">Microsoft 账号</b> 登录。
-      已拥有 Microsoft 账号即可直接使用，无需再次注册。
+      本平台不单独存储账号密码，统一使用 <b style="color:#ffd700;">R6T5 网盘（netdisk.r6t5.dpdns.org）</b>
+      的账号授权登录。在网盘注册过的账号即可直接使用，无需在这里重复注册。
     </div>
-    <div class="note" style="margin-bottom:16px;">
-      还没有 Microsoft 账号？按以下步骤免费创建：
-    </div>
+    <div class="note" style="margin-bottom:16px;">还没有网盘账号？按以下步骤获取：</div>
     <div class="step">
-      1. 点击下方按钮前往 Microsoft 注册页<br>
-      2. 填写邮箱并设置密码<br>
-      3. 完成后返回本页，点击「去登录」
+      1. 打开 <b>netdisk.r6t5.dpdns.org</b>，在登录页自助注册（或联系管理员建号）<br>
+      2. 完成后返回本页，点击「去登录」授权即可通行全部应用
     </div>
-    <a class="btn btn-secondary" href="https://signup.live.com/" target="_blank">前往 Microsoft 注册</a>
+    <a class="btn btn-secondary" href="https://netdisk.r6t5.dpdns.org" target="_blank" rel="noopener">前往 R6T5 网盘</a>
     <button class="btn btn-primary" onclick="goLogin()">已完成，去登录</button>
   </div>
 </div>
 <script>
 const Q = new URLSearchParams(location.search);
 const APP = Q.get("app") || "";
-const APP_NAMES = { wordgm: "《单词闯关》", wrobook: "《错题本》", tanchi: "《TanchiNotes》", "open-platform": "R6T5 开放平台" };
-const APP_URLS = {
-  wordgm: "https://wordgm.r6t5.dpdns.org",
-  wrobook: "https://wrobook.r6t5.dpdns.org",
-  tanchi: "https://tanchi.r6t5.dpdns.org"
-};
+const APP_NAMES = { wordgm: "《单词闯关》", wallet: "积分钱包", wrobook: "《错题本》", tanchi: "《TanchiNotes》", "open-platform": "R6T5 开放平台" };
 if (APP && APP_NAMES[APP]) {
-  document.getElementById("pageTitle").textContent = "🔐 注册";
-  document.getElementById("pageSubtitle").textContent = "创建账号以使用" + APP_NAMES[APP];
+  document.getElementById("pageTitle").textContent = "🔐 账号说明";
+  document.getElementById("pageSubtitle").textContent = "登录以使用" + APP_NAMES[APP];
 }
 function goLogin() {
   location.href = "index.html" + (APP ? "?app=" + APP : "");
